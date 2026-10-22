@@ -58,7 +58,7 @@ Each dream is costed on its own (from zero savings, so goals don't double-count 
 ## Simplifications to be aware of
 Annual (not monthly) CPF interest; no bonuses/AW; PR graduated rates approximated by full rates (flagged); tax paid in same year; CPF housing use only for an existing loan (no new purchases, accrued-interest refund rules or valuation limits); no CPF after 55; no mortgage; insurance and student-loan amounts are placeholders; no interest on unfunded shortfalls; investment returns are deterministic per scenario (no volatility sequence other than the one downturn).
 
-## Tests (`npm test` — 79 tests)
+## Tests (`npm test` — 82 tests)
 - `cpf.test.ts`: rates, ceiling, $50/$500/$750 bands, CPF rounding, year-table fallback, allocation against CPF's worked example, interest caps, eligibility.
 - `tax-paycheck-finance.test.ts`: tax bands, reliefs, paycheck split, NS allowance, PR note, TVM helpers.
 - `projection.test.ts`: money conservation across scenarios, CPF separate from spendable money, no employer-CPF double count, CPF stops at 55, shortfall handling and repayment, career break months, interconnections (pet → runway; rent → surplus; downturn sell), scenario ordering, 200 generated characters with finite outputs.

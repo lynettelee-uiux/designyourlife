@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActionBar, Button, Card, Icon, Segmented, Slider, cx } from '../components/ui';
 import { DISTANCE, DistanceBadge, DistanceBar } from '../components/Distance';
 import { LiteHero } from '../components/Hero';
+import { dreamOptions } from './dreamOptions';
 import { aspirationById } from '../data/aspirations';
 import { money } from '../engine/format';
 import { paycheck } from '../engine/paycheck';
-import { STATUS_INFO, type AspirationId, type Dreams, type LifeStatus, type Living } from '../engine/profile';
+import { STATUS_INFO, lifeStage, type AspirationId, type Dreams, type LifeStatus, type Living } from '../engine/profile';
 import { monthlySnapshot } from '../engine/projection';
 import type { GoalResult } from '../engine/goals';
 import { LITE_DREAMS, MAX_DREAMS, dreamAlreadyMet, emptyInput, liteSimulate, momentImpact, type LiteInput, type LiteResult } from './liteSim';
@@ -293,7 +294,7 @@ function StepDreams({ input, set, result, picked }: StepProps & { result: LiteRe
   const toggle = (id: AspirationId) => {
     const d: Dreams = { ...input.dreams };
     if (d[id]) delete d[id];
-    else if (picked < MAX_DREAMS) d[id] = { id };
+    else if (picked < MAX_DREAMS) d[id] = { id, ...dreamOptions(id, input.age, lifeStage(input)).defaults };
     set({ dreams: d, decisions: {} });
   };
   return (
@@ -335,8 +336,36 @@ function StepDreams({ input, set, result, picked }: StepProps & { result: LiteRe
         })}
       </div>
       <p className="mt-2 text-xs text-ink-mute" aria-live="polite">
-        {picked}/{MAX_DREAMS} picked · typical amounts and timings used
+        {picked}/{MAX_DREAMS} picked{picked > 0 ? ' · set when and how big below' : ''}
       </p>
+      {picked > 0 && (
+        <section className="mt-4 space-y-2.5" aria-label="Make your dreams yours">
+          {LITE_DREAMS.filter((id) => input.dreams[id] && !dreamAlreadyMet(id, input.living)).map((id) => {
+            const opts = dreamOptions(id, input.age, lifeStage(input));
+            const d = input.dreams[id]!;
+            const g = result.goals.find((x) => x.id === id);
+            return (
+              <Card key={id} className="p-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="flex items-center gap-2 font-semibold">
+                    <span aria-hidden className="text-lg">{dreamEmoji(id, d.variant)}</span>
+                    {aspirationById(id).title}
+                  </h3>
+                  {g && <DistanceBadge status={g.status} />}
+                </div>
+                <div className="space-y-3">
+                  {opts.rows.map((row) => (
+                    <div key={row.key} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                      <span className="w-full text-xs font-semibold text-ink-mute">{row.label}</span>
+                      <Chips value={d[row.key] as number | string | undefined} options={row.options} onChange={(v) => set({ dreams: { ...input.dreams, [id]: { ...d, [row.key]: v } }, decisions: {} })} label={`${aspirationById(id).title}: ${row.label}`} />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            );
+          })}
+        </section>
+      )}
       {result.goals.length > 0 && <Verdict result={result} title="Your starting point" />}
     </>
   );
