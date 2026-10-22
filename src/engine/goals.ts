@@ -23,6 +23,10 @@ export interface GoalResult {
   numbers: { label: string; value: string }[];
   /** Which scenarios keep this goal on track — conveys uncertainty without a single verdict. */
   byScenario: Record<ScenarioKey, GoalStatus>;
+  /** How far the baseline path gets toward the goal, 0–1 (1 = there). */
+  progress: number;
+  /** Plain-language "what would close the gap", when there is one. */
+  gap?: string;
 }
 
 const fromRatio = (r: number): GoalStatus => (r >= 1 ? 'on_track' : r >= 0.7 ? 'adjust' : 'explore');
@@ -57,7 +61,7 @@ export function emergencyTarget(plan: Plan, dreams: Dreams): number {
   return irregular ? EMERGENCY_FUND.irregularMonths : dreams.financial_security?.months ?? EMERGENCY_FUND.maxMonths;
 }
 
-function evaluateOne(id: AspirationId, plan: Plan, proj: Projection, profile: Profile, dreams: Dreams): Omit<GoalResult, 'byScenario'> {
+function evaluateOne(id: AspirationId, plan: Plan, proj: Projection, profile: Profile, dreams: Dreams): Omit<GoalResult, 'byScenario' | 'progress' | 'gap'> {
   const d = resolveDream(dreams[id]!, profile);
   const s = SCENARIOS[proj.scenario];
   const a = plan.startAge;
@@ -225,7 +229,7 @@ function evaluateOne(id: AspirationId, plan: Plan, proj: Projection, profile: Pr
 }
 
 /** Long-term CPF outlook: compares projected OA+SA at 55 with the projected Full Retirement Sum. Shown only when modelled. */
-function cpfOutlook(id: AspirationId, plan: Plan, proj: Projection, profile: Profile): Omit<GoalResult, 'byScenario'> {
+function cpfOutlook(id: AspirationId, plan: Plan, proj: Projection, profile: Profile): Omit<GoalResult, 'byScenario' | 'progress' | 'gap'> {
   const kind = incomePhaseAt(plan, profile.mainIncomeAge)?.kind ?? 'none';
   if (!cpfApplies(plan.residency, kind)) {
     return { id, status: 'adjust', headline: 'Retiring at 65 or later — your CPF is not modelled for your situation.', detail: 'Self-employed people, gig workers and foreigners have different CPF rules. Your own savings would fund more of retirement.', numbers: [] };
@@ -256,6 +260,96 @@ export function evaluateGoals(plan: Plan, projections: Record<ScenarioKey, Proje
       baseline: base.status,
       challenging: evaluateOne(id, plan, projections.challenging, profile, dreams).status,
     };
-    return { ...base, byScenario };
+    return { ...base, byScenario, ...goalDistance(id, base.status, plan, projections.baseline, profile, dreams) };
   });
+}
+
+const clamp01 = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
+
+/**
+ * Distance to a goal on the baseline path: a 0–1 progress value for a bar, and one plain line on
+ * what could close the gap. Ratio goals use have ÷ need; monthly-budget goals use the margin left
+ * after costs (10% of take-home counts as comfortable).
+ */
+export function goalDistance(id: AspirationId, status: GoalStatus, plan: Plan, proj: Projection, profile: Profile, dreams: Dreams): { progress: number; gap?: string } {
+  const d = resolveDream(dreams[id]!, profile);
+  const s = SCENARIOS[proj.scenario];
+  const a = plan.startAge;
+  const perMonth = (amount: number, age: number) => amount / Math.max(12, (age - a) * 12);
+  const ratioGoal = (have: number, need: number, age: number, alt: string) => {
+    const progress = need > 0 ? clamp01(have / need) : 1;
+    const short = need - Math.max(0, have);
+    return { progress, gap: progress < 1 ? `About ${money(perMonth(short, age))} more saved each month until ${age} — ${alt}.` : undefined };
+  };
+  const budgetGoal = (age: number, what: string) => {
+    const snap = monthlySnapshot(plan, age, proj.scenario);
+    const comfy = 0.1 * Math.max(0, snap.takeHome);
+    const margin = comfy > 0 ? clamp01(snap.surplus / comfy) : 0;
+    const progress = status === 'on_track' ? 1 : status === 'adjust' ? 0.7 + 0.25 * margin : 0.6 * margin;
+    if (status === 'on_track') return { progress };
+    const free = Math.max(0, comfy - snap.surplus);
+    if (free < 10) {
+      // Monthly budget is fine at this age; the pressure comes from other commitments later on.
+      const short = proj.firstShortfallAge;
+      return { progress, gap: `This one fits your monthly budget, but your savings could run short${short !== undefined ? ` around ${short}` : ''} once your other dreams start — easing those, or ${what}, would help.` };
+    }
+    return { progress, gap: `Freeing up about ${money(free)} a month at ${age} — or ${what} — would give you breathing room.` };
+  };
+
+  switch (id) {
+    case 'retire_early': {
+      const R = plan.retireAge;
+      if (R >= CPF_PAYOUT_AGE) {
+        const at55 = balancesAtAge(plan, proj, 55);
+        const frs = inflate(RETIREMENT_SUMS_2026.frs, RETIREMENT_SUM_GROWTH, plan.startYear + (55 - a) - 2026);
+        const progress = clamp01((at55.cpf.oa + at55.cpf.sa) / frs);
+        return { progress, gap: progress < 1 ? 'Your CPF builds automatically while you earn a salary; extra growth would come from your own savings or CPF top-ups.' : undefined };
+      }
+      const bridge = CPF_PAYOUT_AGE - R;
+      const atR = balancesAtAge(plan, proj, R);
+      const short = proj.rows.find((r) => r.age >= R && r.shortfall > 0)?.age;
+      const funded = atR.unfunded > 0 ? 0 : short === undefined ? bridge : Math.max(0, short - R);
+      const progress = clamp01(funded / bridge);
+      if (progress >= 1) return { progress };
+      const missing = (bridge - funded) * inflate(plan.retirementMonthly * 12, s.inflation, R - a);
+      return { progress, gap: `Roughly ${money(perMonth(missing, R))} more a month until ${R} (before any investment growth) — or retiring a few years later.` };
+    }
+    case 'own_home': {
+      const b = balancesAtAge(plan, proj, d.age!);
+      return ratioGoal(Math.max(0, b.liquid) + b.cpf.oa, inflate(d.amount!, s.inflation, d.age! - a), d.age!, 'or a later timeline');
+    }
+    case 'business': {
+      const b = balancesAtAge(plan, proj, d.age!);
+      const need = inflate(d.amount!, s.inflation, d.age! - a) + monthlySpendAt(plan, d.age!, s).total * 6;
+      return ratioGoal(b.liquid, need, d.age!, 'or starting smaller or later');
+    }
+    case 'career_break': {
+      const gap = plan.incomeGaps.find((g) => g.id === 'career-break');
+      if (!gap || gap.months === 0) return { progress: 1 };
+      const b = balancesAtAge(plan, proj, gap.age);
+      const need = monthlySpendAt(plan, gap.age, s).total * (gap.months + 3);
+      return ratioGoal(b.liquid, need, gap.age, 'or a shorter or later break');
+    }
+    case 'creative_career':
+    case 'financial_security': {
+      const age = a + 3;
+      const target = emergencyTarget(plan, dreams);
+      const spend = monthlySpendAt(plan, age, s).total;
+      return ratioGoal(balancesAtAge(plan, proj, age).cash, spend * target, age, 'or a smaller cushion to start');
+    }
+    case 'travel': {
+      const from = plan.recurring.find((r) => r.id === 'travel')?.fromAge ?? a;
+      return budgetGoal(Math.max(a + 1, from), 'fewer or cheaper trips');
+    }
+    case 'live_independently':
+      return budgetGoal(plan.recurring.find((r) => r.id === 'move-out-rent')?.fromAge ?? d.age!, 'a cheaper room or moving a little later');
+    case 'pet':
+      return budgetGoal(d.age!, 'adopting a little later');
+    case 'support_parents':
+      return budgetGoal(d.age!, 'a smaller amount you can sustain');
+    case 'start_family':
+      return budgetGoal(d.age! + 1, 'trimming other commitments');
+    case 'free_time':
+      return budgetGoal(d.age! + 1, 'starting the four-day week later');
+  }
 }

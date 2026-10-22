@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { evaluateGoals, type GoalResult } from '../engine/goals';
 import { buildPlan, type PlanEffect } from '../engine/plan';
-import type { Dreams, Overrides } from '../engine/profile';
+import type { AspirationId, Dreams, Overrides } from '../engine/profile';
 import { balancesAtAge, monthlySnapshot, projectAll } from '../engine/projection';
 import { realityCheck } from '../engine/reality';
 import type { Plan, Projection, ScenarioKey } from '../engine/types';
@@ -82,11 +82,17 @@ export function useSimulation(): Simulation {
   return useMemo(() => simulate(state), [state.profile, state.dreams, state.habits, state.habitEdits, state.decisions, state.overrides]);
 }
 
+/**
+ * The "starting point": where today's path leads before any story decisions or changes —
+ * used by Dream (live badges) and Reality check (distance to each dream).
+ */
 export function useReality() {
   const { state } = useStore();
   return useMemo(() => {
     const plan = buildPlan({ profile: state.profile, dreams: state.dreams, habits: state.habits, habitEdits: state.habitEdits });
-    return { plan, items: realityCheck(plan, state.profile, state.dreams) };
+    const projections = projectAll(plan);
+    const goals = evaluateGoals(plan, projections, state.profile, state.dreams);
+    return { plan, projections, items: realityCheck(plan, state.profile, state.dreams), goals, pressure: biggestPressure(state, goals) };
   }, [state.profile, state.dreams, state.habits, state.habitEdits]);
 }
 
@@ -152,4 +158,33 @@ export function downturnPaths(state: AppState, checkAge: number) {
       challenging: balancesAtAge(plan, all.challenging, checkAge).liquidReal,
     };
   });
+}
+
+export interface Pressure {
+  id: AspirationId;
+  /** Other dreams within reach now, and if this one were set aside. */
+  nearNow: number;
+  nearWithout: number;
+  others: number;
+}
+
+/**
+ * Which single dream, if set aside, brings the most *other* dreams within reach.
+ * Shown as an insight about trade-offs — never as advice to give up a dream.
+ */
+export function biggestPressure(state: AppState, goals: GoalResult[]): Pressure | undefined {
+  const ids = Object.keys(state.dreams) as AspirationId[];
+  if (ids.length < 2) return undefined;
+  let best: Pressure | undefined;
+  for (const id of ids) {
+    const rest = { ...state.dreams };
+    delete rest[id];
+    const plan = buildPlan({ profile: state.profile, dreams: rest, habits: state.habits, habitEdits: state.habitEdits });
+    const without = evaluateGoals(plan, projectAll(plan), state.profile, rest);
+    const nearNow = goals.filter((g) => g.id !== id && g.status === 'on_track').length;
+    const nearWithout = without.filter((g) => g.status === 'on_track').length;
+    const gain = nearWithout - nearNow;
+    if (gain > 0 && (!best || gain > best.nearWithout - best.nearNow)) best = { id, nearNow, nearWithout, others: ids.length - 1 };
+  }
+  return best;
 }

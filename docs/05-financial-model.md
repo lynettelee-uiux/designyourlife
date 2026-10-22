@@ -49,13 +49,16 @@ Ratio-based: ≥ 100% → **On track under current assumptions**; ≥ 70% → **
 - *Security / creative career:* cash ÷ monthly spending at today + 3 vs 6 months (12 if income irregular).
 - *Travel, living independently, pet, family support, start a family, four-day week:* monthly surplus at the relevant age (≥ 10% of take-home = on track).
 
+## Distance to each dream (`goalDistance`, `biggestPressure`)
+On the starting-point plan (no story decisions), each goal gets a 0–1 progress value — have ÷ need for savings goals; monthly margin vs 10% of take-home for budget goals — that always agrees with its status (tested), plus a one-line way to close the gap (extra monthly saving to the target age, or a cheaper/later version). `biggestPressure` re-runs the plan without each dream in turn and reports the one whose removal brings the most other dreams within reach; it's framed as a trade-off insight, never as advice to give a dream up.
+
 ## Reality check (`reality.ts`)
 Each dream is costed on its own (from zero savings, so goals don't double-count the same money): inflated cost at target age, years to prepare, recurring cost, and level monthly saving needed at ~1% (cash) vs an illustrative 4% (invested, not guaranteed).
 
 ## Simplifications to be aware of
 Annual (not monthly) CPF interest; no bonuses/AW; PR graduated rates approximated by full rates (flagged); tax paid in same year; CPF housing use only for an existing loan (no new purchases, accrued-interest refund rules or valuation limits); no CPF after 55; no mortgage; insurance and student-loan amounts are placeholders; no interest on unfunded shortfalls; investment returns are deterministic per scenario (no volatility sequence other than the one downturn).
 
-## Tests (`npm test` — 59 tests)
+## Tests (`npm test` — 61 tests)
 - `cpf.test.ts`: rates, ceiling, $50/$500/$750 bands, CPF rounding, year-table fallback, allocation against CPF's worked example, interest caps, eligibility.
 - `tax-paycheck-finance.test.ts`: tax bands, reliefs, paycheck split, NS allowance, PR note, TVM helpers.
 - `projection.test.ts`: money conservation across scenarios, CPF separate from spendable money, no employer-CPF double count, CPF stops at 55, shortfall handling and repayment, career break months, interconnections (pet → runway; rent → surplus; downturn sell), scenario ordering, 200 generated characters with finite outputs.

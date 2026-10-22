@@ -8,7 +8,8 @@ import { buildPlan } from '../../engine/plan';
 import { defaultProfile, STATUS_INFO, surpriseCharacter, type LifeStatus } from '../../engine/profile';
 import { projectAll } from '../../engine/projection';
 import { initialState } from '../../state/store';
-import { simulate, compareChoice } from '../../state/sim';
+import { simulate, compareChoice, biggestPressure } from '../../state/sim';
+import { evaluateGoals } from '../../engine/goals';
 
 const ctxFor = (status: LifeStatus, extra: Partial<ScenarioCtx> = {}): ScenarioCtx => {
   const profile = { ...defaultProfile(22, status), nickname: 'Sam' };
@@ -100,5 +101,23 @@ describe('every choice in every chapter produces a valid plan', () => {
     const sim = simulate(st);
     expect(sim.plan.incomeGaps.find((g) => g.id === 'career-break')!.months).toBe(2);
     expect(sim.storyPlan.incomeGaps.find((g) => g.id === 'career-break')!.months).toBe(6);
+  });
+});
+
+describe('biggest pressure insight', () => {
+  it('identifies moving out as the dream crowding out the others for a $3,000 earner', () => {
+    const profile = { ...defaultProfile(22, 'employed'), nickname: 'Jo' };
+    const dreams = { travel: { id: 'travel' as const }, live_independently: { id: 'live_independently' as const }, pet: { id: 'pet' as const }, career_break: { id: 'career_break' as const } };
+    const state = { ...initialState(), profile, dreams };
+    const plan = buildPlan({ profile, dreams, habits: {} });
+    const p = biggestPressure(state, evaluateGoals(plan, projectAll(plan), profile, dreams));
+    expect(p?.id).toBe('live_independently');
+    expect(p!.nearWithout).toBeGreaterThan(p!.nearNow);
+  });
+  it('says nothing when there is only one dream', () => {
+    const profile = defaultProfile(22, 'employed');
+    const dreams = { travel: { id: 'travel' as const } };
+    const plan = buildPlan({ profile, dreams, habits: {} });
+    expect(biggestPressure({ ...initialState(), profile, dreams }, evaluateGoals(plan, projectAll(plan), profile, dreams))).toBeUndefined();
   });
 });

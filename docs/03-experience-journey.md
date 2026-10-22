@@ -6,8 +6,8 @@
 |---|---|---|---|---|
 | 0 | Welcome | Start, or "Surprise me" | Privacy promise; no sign-up | 15s |
 | 0 | About you (3 questions) | Nickname/avatar → age & what you're doing → where you live (incl. "I own a home", with optional loan & CPF figures) → "You're all set" | Everything else (residency, income & savings, family allowance, student loan) is pre-filled from status defaults and tucked under optional "Adjust details"; shows a first CPF "quick fact" | ~45s |
-| 1 | **Dream** | Picks aspirations, tunes ages/amounts; retirement explained in "today's dollars" with presets | Live **Future Vision** card | 1–1.5 min |
-| 2 | **Reality check** | Reads indicative costs | Inflation-adjusted costs, time to prepare, recurring commitments, monthly saving (cash vs illustrative invested), caveats; "Still the future you want?" → revise freely | 1 min |
+| 1 | **Dream** | Picks aspirations; each chosen dream collapses to a one-line summary with a dropdown to adjust; retirement explained in "today's dollars" with presets | Live near/far badge per dream (Within reach / A stretch / Further away) on the current path; "biggest pressure" tip; **Future Vision** card | 1–1.5 min |
+| 2 | **Reality check** | Reads a verdict, then one card per dream | Verdict ("2 of 4 dreams look within reach") with a distance bar per dream; **biggest pressure** insight (which dream, if eased, brings the most others within reach); per-dream % of the way, "what could close the gap", and numbers in a "See the numbers" dropdown; "Still the future you want?" → revise freely | 1 min |
 | 3 | **Life choices** | 6 one-tap questions | Editable behavioural profile: lifestyle $, invest %, risk comfort. Explicitly "not a verdict" | 1 min |
 | 4 | **Life happens** | 5–7 chapters, 2–4 choices each, replayable | Immediate (monthly left over, one-off) and long-term (net savings at 35+, goal status changes) consequences, computed by the same engine; reflection + sourced learning card | 2–3 min |
 | 5 | **Your outlook** | Reads results | 3-scenario chart (today's/future $), goal statuses per scenario, buffer, CPF@55 (when modelled), spending split, decisions list, "How we calculated this" | 1 min |

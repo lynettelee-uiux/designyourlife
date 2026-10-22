@@ -1,9 +1,11 @@
-import { ActionBar, Button, Card, Icon, Note, Screen, Segmented, Slider, StageIntro, cx } from '../components/ui';
+import { ActionBar, Button, Icon, Note, Screen, Segmented, Slider, StageIntro, cx } from '../components/ui';
 import { ASPIRATIONS, aspirationById, type ParamSpec } from '../data/aspirations';
 import { money } from '../engine/format';
 import { resolveDream } from '../engine/plan';
 import type { AspirationId, DreamSelection } from '../engine/profile';
 import { useStore } from '../state/store';
+import { useReality } from '../state/sim';
+import { DistanceBadge } from '../components/Distance';
 
 const RETIRE_PRESETS = [
   { label: 'Simple', amount: 1800 },
@@ -15,6 +17,7 @@ export default function Dream() {
   const { state, dispatch } = useStore();
   const { dreams, profile } = state;
   const name = profile.nickname || 'there';
+  const { goals, pressure } = useReality();
   const selected = ASPIRATIONS.filter((a) => dreams[a.id] && !(a.id === 'own_home' && profile.living === 'own') && !(a.id === 'live_independently' && profile.living !== 'family'));
 
   const toggle = (id: AspirationId) => {
@@ -77,39 +80,57 @@ export default function Dream() {
           <h2 id="make-it-yours" className="display text-xl">
             Make it yours
           </h2>
-          <p className="mb-3 text-sm text-ink-mute">Adjust the details. Amounts are in today’s dollars.</p>
-          <div className="space-y-3">
+          <p className="mb-3 text-sm text-ink-mute">We’ve filled in typical details. Open any dream to adjust it — the badge shows how near it looks on your current path.</p>
+          {pressure && (
+            <div className="mb-3 flex gap-2.5 rounded-2xl bg-blush-100 p-3.5 text-sm leading-relaxed">
+              <Icon name="Lightbulb" className="mt-0.5 h-4 w-4 shrink-0 text-magenta-700" />
+              <p>
+                <strong>{aspirationById(pressure.id).title}</strong> is putting the most pressure on your other dreams. Try a later age or a smaller amount and watch the badges change.
+              </p>
+            </div>
+          )}
+          <div className="space-y-2.5">
             {selected.map((a) => {
               const d = resolveDream(dreams[a.id]!, profile);
+              const g = goals.find((x) => x.id === a.id);
               return (
-                <Card key={a.id} className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <span className={cx('grid h-9 w-9 place-items-center rounded-2xl', a.tint)}>
+                <details key={a.id} className="group card overflow-hidden p-0">
+                  <summary className="flex min-h-[64px] items-center gap-3 px-4 py-3">
+                    <span className={cx('grid h-9 w-9 shrink-0 place-items-center rounded-2xl', a.tint)}>
                       <Icon name={a.icon} />
                     </span>
-                    <h3 className="font-semibold">{a.title}</h3>
-                    <button type="button" onClick={() => toggle(a.id)} className="ml-auto grid h-10 w-10 place-items-center rounded-full text-ink-mute hover:bg-mist-100" aria-label={`Remove ${a.title}`}>
-                      <Icon name="X" className="h-4 w-4" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold leading-tight">{a.title}</span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-xs text-ink-mute">{paramSummary(a.params, d)}</span>
+                        {g && <DistanceBadge status={g.status} className="!px-2 !py-0.5 text-[11px]" />}
+                      </span>
+                    </span>
+                    <Icon name="ChevronDown" className="h-4 w-4 shrink-0 text-ink-mute transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="space-y-3 border-t border-mist-200 px-4 pb-4 pt-3">
+                    {a.id === 'retire_early' && (
+                      <>
+                        <Note>
+                          <strong>Today’s dollars</strong> means “what this would buy now”. If prices rise about 2% a year, $3,000 of today’s lifestyle costs roughly {money(3000 * Math.pow(1.02, 30))} a month in 30 years.
+                        </Note>
+                        <div className="flex flex-wrap gap-2" role="group" aria-label="Retirement lifestyle presets">
+                          {RETIRE_PRESETS.map((pr) => (
+                            <button key={pr.label} type="button" aria-pressed={d.amount === pr.amount} onClick={() => update(a.id, { amount: pr.amount })} className={cx('min-h-[40px] rounded-full border px-3.5 text-sm font-semibold', d.amount === pr.amount ? 'border-ink bg-navy-50' : 'border-mist-300 bg-white')}>
+                              {pr.label} · {money(pr.amount)}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {a.params.map((ps) => (
+                      <Param key={ps.key} spec={ps} value={d[ps.key] as number | string | undefined} onChange={(v) => update(a.id, { [ps.key]: v })} minAge={profile.age} />
+                    ))}
+                    <button type="button" onClick={() => toggle(a.id)} className="text-sm font-semibold text-ink-mute underline underline-offset-4 hover:text-ink">
+                      Remove this dream
                     </button>
                   </div>
-                  {a.id === 'retire_early' && (
-                    <>
-                      <Note>
-                        <strong>Today’s dollars</strong> means “what this would buy now”. If prices rise about 2% a year, $3,000 of today’s lifestyle costs roughly {money(3000 * Math.pow(1.02, 30))} a month in 30 years.
-                      </Note>
-                      <div className="flex flex-wrap gap-2" role="group" aria-label="Retirement lifestyle presets">
-                        {RETIRE_PRESETS.map((pr) => (
-                          <button key={pr.label} type="button" aria-pressed={d.amount === pr.amount} onClick={() => update(a.id, { amount: pr.amount })} className={cx('min-h-[40px] rounded-full border px-3.5 text-sm font-semibold', d.amount === pr.amount ? 'border-ink bg-navy-50' : 'border-mist-300 bg-white')}>
-                            {pr.label} · {money(pr.amount)}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                  {a.params.map((ps) => (
-                    <Param key={ps.key} spec={ps} value={d[ps.key] as number | string | undefined} onChange={(v) => update(a.id, { [ps.key]: v })} minAge={profile.age} />
-                  ))}
-                </Card>
+                </details>
               );
             })}
           </div>
@@ -168,4 +189,20 @@ function Param({ spec, value, onChange, minAge }: { spec: ParamSpec; value: numb
       format={(n) => (spec.prefix === '$' ? money(n) : `${n}${spec.suffix ?? ''}`)}
     />
   );
+}
+
+/** One-line summary of a dream's settings, e.g. "by 28 · $30,000". */
+function paramSummary(params: ParamSpec[], d: DreamSelection): string {
+  return params
+    .map((ps) => {
+      const v = d[ps.key as keyof DreamSelection];
+      if (v === undefined) return null;
+      if (ps.options) return ps.options.find((o) => o.value === v)?.label ?? String(v);
+      if (ps.key === 'age') return `${ps.label.toLowerCase().startsWith('by') ? 'by' : 'at'} ${v}`;
+      if (ps.key === 'count') return `${v} ${ps.label.toLowerCase()}`;
+      if (ps.prefix === '$') return `${money(Number(v))}${ps.label.toLowerCase().includes('month') ? '/mo' : ''}`;
+      return `${v}${ps.suffix ?? ''}`;
+    })
+    .filter(Boolean)
+    .join(' · ');
 }

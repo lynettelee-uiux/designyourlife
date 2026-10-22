@@ -181,6 +181,11 @@ describe('robustness across generated characters', () => {
       for (const g of evaluateGoals(plan, all, c.profile, c.dreams)) {
         expect(['on_track', 'adjust', 'explore']).toContain(g.status);
         expect(g.headline).not.toMatch(/NaN|undefined|Infinity/);
+        // the distance bar and the status must tell the same story
+        expect(g.progress).toBeGreaterThanOrEqual(0);
+        expect(g.progress).toBeLessThanOrEqual(1);
+        expect(g.progress >= 1, `${g.id} ${g.status} ${g.progress}`).toBe(g.status === 'on_track');
+        if (g.status !== 'on_track') expect(g.gap ?? '').not.toMatch(/NaN|undefined|Infinity/);
       }
       for (const r of realityCheck(plan, c.profile, c.dreams)) {
         expect(r.summary).not.toMatch(/NaN|undefined/);
