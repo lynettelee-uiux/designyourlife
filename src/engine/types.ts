@@ -97,6 +97,8 @@ export interface Plan {
   investMonthly: number;
   riskLevel: RiskLevel;
   downturn?: { age: number; response: DownturnResponse };
+  /** Monthly home-loan instalment paid from CPF OA (today's figure, nominal — loan instalments don't inflate). */
+  cpfHousing?: { monthly: number; fromAge: number; toAge: number };
   retireAge: number;
   /** All-in monthly spending in retirement, today's dollars. */
   retirementMonthly: number;
@@ -130,6 +132,8 @@ export interface YearRow {
   cpfTotal: number;
   cpfReal: number;
   cpfModelled: boolean;
+  /** Home-loan instalments paid from CPF OA this year. */
+  cpfHousing: number;
   shortfall: number;
   /** Monthly recurring spend this year (nominal). */
   monthlySpend: number;

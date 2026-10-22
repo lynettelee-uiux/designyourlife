@@ -104,7 +104,7 @@ function load(): AppState {
     if (!raw) return initialState();
     const parsed = JSON.parse(raw) as AppState;
     if (parsed.version !== 1) return initialState();
-    return { ...initialState(), ...parsed, stage: parsed.stage === 'about' ? parsed.returnTo ?? 'welcome' : parsed.stage };
+    return { ...initialState(), ...parsed, profile: { ...defaultProfile(), ...parsed.profile }, stage: parsed.stage === 'about' ? parsed.returnTo ?? 'welcome' : parsed.stage };
   } catch {
     return initialState();
   }

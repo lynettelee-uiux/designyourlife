@@ -105,6 +105,12 @@ export function buildPlan(inp: PlanInputs): Plan {
   }
   if (p.familyAllowance > 0) recurring.push({ id: 'family-allowance', label: 'Allowance to family', category: 'family', monthly: p.familyAllowance, fromAge: a, source: 'profile' });
   if (p.living === 'room') recurring.push({ id: 'rent', label: 'Room rent & utilities', category: 'housing', monthly: COST_DEFAULTS.roomRent + COST_DEFAULTS.utilitiesWhenRenting, fromAge: a, source: 'profile' });
+  const ownsHome = p.living === 'own';
+  if (ownsHome) {
+    recurring.push({ id: 'home-running', label: 'Home running costs: S&CC, utilities, upkeep (illustrative)', category: 'housing', monthly: COST_DEFAULTS.ownHomeRunning, fromAge: a, source: 'profile' });
+    const cashPart = Math.max(0, p.homeLoanMonthly - p.homeLoanCpf);
+    if (cashPart > 0 && p.homeLoanYears > 0) recurring.push({ id: 'home-loan-cash', label: 'Home loan (cash portion)', category: 'housing', monthly: cashPart, fromAge: a, toAge: a + p.homeLoanYears, nominal: true, source: 'profile' });
+  }
   if (p.living === 'whole_unit') recurring.push({ id: 'rent', label: 'Rent share & utilities', category: 'housing', monthly: COST_DEFAULTS.wholeUnitRentShare, fromAge: a, source: 'profile' });
   if (p.studentLoan) {
     const start = Math.max(a, p.mainIncomeAge);
@@ -144,6 +150,7 @@ export function buildPlan(inp: PlanInputs): Plan {
         break;
       }
       case 'own_home': {
+        if (ownsHome) break; // already owns a home
         recurring.push({ id: 'home-costs', label: 'Home running costs (illustrative)', category: 'housing', monthly: 400, fromAge: d.age!, source: 'dream' });
         break;
       }
@@ -192,6 +199,7 @@ export function buildPlan(inp: PlanInputs): Plan {
     retireAge,
     retirementMonthly,
     endAge: END_AGE,
+    cpfHousing: ownsHome && p.homeLoanCpf > 0 && p.homeLoanYears > 0 ? { monthly: Math.min(p.homeLoanCpf, p.homeLoanMonthly || p.homeLoanCpf), fromAge: a, toAge: a + p.homeLoanYears } : undefined,
   };
 
   for (const e of inp.effects ?? []) applyEffect(plan, e);

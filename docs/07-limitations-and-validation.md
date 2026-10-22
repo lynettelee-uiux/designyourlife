@@ -12,7 +12,7 @@ No accounts, NRIC, exact income, credentials or bank links · nickname only · e
 
 ## Known limitations
 **Financial model**
-- CPF beyond 55 (RA, CPF LIFE payouts), CPF housing withdrawals, PR graduated rates, bonuses/Additional Wages, Platform Workers Act CPF and self-employed MediSave are not modelled (labelled in UI).
+- CPF beyond 55 (RA, CPF LIFE payouts), CPF housing rules beyond a simple monthly OA deduction for an existing loan (accrued interest, valuation/withdrawal limits), PR graduated rates, bonuses/Additional Wages, Platform Workers Act CPF and self-employed MediSave are not modelled (labelled in UI).
 - Tax: resident only, two reliefs, same-year timing; non-resident tax not modelled.
 - Home ownership is a readiness check against a placeholder fund; mortgages, grants, loans and eligibility are not modelled.
 - Student loans use an illustrative repayment; the Higher Education Student Loan (from 29 Jul 2026) was not researched.

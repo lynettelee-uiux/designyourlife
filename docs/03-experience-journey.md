@@ -5,7 +5,7 @@
 | Stage | Screen | User does | System does | ~Time |
 |---|---|---|---|---|
 | 0 | Welcome | Start, or "Surprise me" | Privacy promise; no sign-up | 15s |
-| 0 | About you (6 micro-steps) | Nickname/avatar → age & status → residency → home & family → money (fictional/rough) → review | Status-based defaults (graduate survey medians, NS allowance); every step skippable; shows a first CPF "quick fact" | 1–1.5 min |
+| 0 | About you (3 questions) | Nickname/avatar → age & what you're doing → where you live (incl. "I own a home", with optional loan & CPF figures) → "You're all set" | Everything else (residency, income & savings, family allowance, student loan) is pre-filled from status defaults and tucked under optional "Adjust details"; shows a first CPF "quick fact" | ~45s |
 | 1 | **Dream** | Picks aspirations, tunes ages/amounts; retirement explained in "today's dollars" with presets | Live **Future Vision** card | 1–1.5 min |
 | 2 | **Reality check** | Reads indicative costs | Inflation-adjusted costs, time to prepare, recurring commitments, monthly saving (cash vs illustrative invested), caveats; "Still the future you want?" → revise freely | 1 min |
 | 3 | **Life choices** | 6 one-tap questions | Editable behavioural profile: lifestyle $, invest %, risk comfort. Explicitly "not a verdict" | 1 min |
@@ -40,14 +40,14 @@ Chapters are chosen per person (max 7, sorted by age): aspiration-driven first, 
 ## Personalisation rules
 - **Status → defaults**: income phase(s), CPF applicability (salary vs allowance vs self), starting cash, main-work age.
 - **Residency → CPF**: SC/undisclosed full rates; PR full rates with a visible approximation note; Other = no CPF.
-- **Living → costs**: with family vs room vs whole unit; move-out dream adds rent + groceries.
+- **Living → costs**: with family vs room vs whole unit vs own home; move-out dream adds rent + groceries. Owners enter (or accept) a monthly instalment and the CPF-paid part; "Own a home" and "Live on my own" dreams show as already met.
 - **Habits → plan**: social → lifestyle factor (0.85/1/1.2); windfall → invest share (5/10/15%); risk → portfolio type and downturn size (8/20/35%). All editable.
 - **Pre-work years**: lifestyle at 50% and travel starting at main work (illustrative).
 - **Change One Thing**: one lever at a time (retirement age, monthly investing, lifestyle, move-out age, home timeline, break length, trips) overrides story decisions.
 
 ## Information architecture
 ```
-Welcome ─┬─ About you (6 steps, review)
+Welcome ─┬─ About you (3 questions → You're all set + optional details)
          └─ Surprise me ─→ review
 Journey: Dream → Reality check → Life choices → Life happens (chapters) → Outlook → Next move
 Global: header (avatar → profile; menu → How this works & sources / Edit profile / Start over), progress bar (revisit completed stages)

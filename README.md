@@ -23,7 +23,7 @@ Open http://localhost:5173.
 | Script | What it does |
 |---|---|
 | `npm run dev` | Dev server with hot reload |
-| `npm test` | Run 56 automated tests (CPF, tax, projections, scenarios) |
+| `npm test` | Run 59 automated tests (CPF, tax, projections, scenarios) |
 | `npm run typecheck` | TypeScript strict check |
 | `npm run build` | Type-check and build static files to `dist/` |
 | `npm run preview` | Serve the production build locally |

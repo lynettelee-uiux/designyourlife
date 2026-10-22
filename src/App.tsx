@@ -70,7 +70,7 @@ function Header() {
         </button>
         <div className="flex items-center gap-1">
           {state.profile.nickname && (
-            <button type="button" onClick={() => dispatch({ type: 'go', stage: 'profile' })} className="flex items-center gap-2 rounded-full p-1 pr-3 hover:bg-mist-100" aria-label={`Edit profile for ${state.profile.nickname}`}>
+            <button type="button" onClick={() => dispatch({ type: 'go', stage: 'profile', step: 3 })} className="flex items-center gap-2 rounded-full p-1 pr-3 hover:bg-mist-100" aria-label={`Edit profile for ${state.profile.nickname}`}>
               <Avatar id={state.profile.avatar} size="sm" />
               <span className="hidden text-sm font-semibold sm:inline">{state.profile.nickname}</span>
             </button>
@@ -82,7 +82,7 @@ function Header() {
             {menu && (
               <div className="absolute right-0 top-12 w-64 rounded-2xl border border-mist-200 bg-white p-2 shadow-card" role="menu">
                 <MenuItem icon="BookOpen" label="How this works & sources" onClick={() => { setMenu(false); dispatch({ type: 'openAbout' }); }} />
-                <MenuItem icon="Pencil" label="Edit my profile" onClick={() => { setMenu(false); dispatch({ type: 'go', stage: 'profile' }); }} />
+                <MenuItem icon="Pencil" label="Edit my profile" onClick={() => { setMenu(false); dispatch({ type: 'go', stage: 'profile', step: 3 }); }} />
                 <MenuItem
                   icon="RotateCcw"
                   label="Start over (clear my data)"

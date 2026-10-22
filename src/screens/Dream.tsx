@@ -15,7 +15,7 @@ export default function Dream() {
   const { state, dispatch } = useStore();
   const { dreams, profile } = state;
   const name = profile.nickname || 'there';
-  const selected = ASPIRATIONS.filter((a) => dreams[a.id]);
+  const selected = ASPIRATIONS.filter((a) => dreams[a.id] && !(a.id === 'own_home' && profile.living === 'own') && !(a.id === 'live_independently' && profile.living !== 'family'));
 
   const toggle = (id: AspirationId) => {
     const next = { ...dreams };
@@ -34,6 +34,21 @@ export default function Dream() {
       <div className="rise-2 grid grid-cols-2 gap-2.5 sm:grid-cols-3" role="group" aria-label="Aspirations">
         {ASPIRATIONS.map((a) => {
           const on = !!dreams[a.id];
+          const already = a.id === 'own_home' && profile.living === 'own' ? 'You already own one' : a.id === 'live_independently' && profile.living !== 'family' ? 'You already do' : undefined;
+          if (already) {
+            return (
+              <div key={a.id} className="relative flex min-h-[104px] flex-col items-start rounded-3xl border border-dashed border-mist-300 p-3.5">
+                <span className={cx('grid h-9 w-9 place-items-center rounded-2xl', a.tint)}>
+                  <Icon name={a.icon} className="h-5 w-5 text-ink-mute" />
+                </span>
+                <span className="mt-2 text-[15px] font-semibold leading-tight text-ink-soft">{a.title}</span>
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-sage-700">
+                  <Icon name="CircleCheck" className="h-3.5 w-3.5" />
+                  {already}
+                </span>
+              </div>
+            );
+          }
           return (
             <button
               key={a.id}
@@ -119,7 +134,7 @@ export default function Dream() {
       )}
 
       <ActionBar>
-        <Button variant="ghost" icon="ArrowLeft" onClick={() => dispatch({ type: 'go', stage: 'profile', step: 5 })}>
+        <Button variant="ghost" icon="ArrowLeft" onClick={() => dispatch({ type: 'go', stage: 'profile', step: 3 })}>
           Back
         </Button>
         <Button iconRight="ArrowRight" disabled={selected.length === 0} onClick={() => dispatch({ type: 'go', stage: 'reality' })}>

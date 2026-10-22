@@ -121,9 +121,42 @@ export function project(plan: Plan, key: ScenarioKey = 'baseline'): Projection {
     const tax = gross > 0 ? estimateAnnualTax(gross, employeeCpf, age, year).tax : 0;
     const takeHome = gross - employeeCpf - tax;
 
+    // ---- CPF (modelled below 55 only) ----
+    const cpfModelled = age < 55;
+    if (cpfModelled) {
+      const interest = annualCpfInterest(cpf);
+      const alloc = allocate(m.total * workMonths, age);
+      cpf = {
+        oa: cpf.oa + interest.oa + alloc.oa,
+        sa: cpf.sa + interest.sa + alloc.sa,
+        ma: cpf.ma + interest.ma + alloc.ma,
+      };
+      const bhs = BHS_2026 * Math.pow(1 + BHS_GROWTH, t);
+      if (cpf.ma > bhs) {
+        cpf.sa += cpf.ma - bhs;
+        cpf.ma = bhs;
+      }
+    }
+
+    // ---- Home loan paid from CPF OA (if any). Anything OA can't cover is paid in cash. ----
+    let cpfHousing = 0;
+    let housingCashTopUp = 0;
+    const hl = plan.cpfHousing;
+    if (hl && hl.monthly > 0 && activeAt(age, hl.fromAge, hl.toAge)) {
+      const need = hl.monthly * 12;
+      if (cpfModelled) {
+        cpfHousing = Math.min(Math.max(0, cpf.oa), need);
+        cpf.oa -= cpfHousing;
+        housingCashTopUp = need - cpfHousing;
+      } else {
+        cpfHousing = need; // after 55 CPF isn't modelled; assume OA keeps covering it
+      }
+    }
+
     // ---- Spending ----
     const { total: monthlySpend, byCategory } = monthlySpendAt(plan, age, s);
-    const spending = monthlySpend * 12;
+    const spending = monthlySpend * 12 + housingCashTopUp;
+    if (housingCashTopUp > 0) byCategory.housing = (byCategory.housing ?? 0) + housingCashTopUp / 12;
     const oneOffs = plan.oneOffs.filter((o) => o.age === age).reduce((sum, o) => sum + o.amount * infl, 0);
     const net = takeHome - spending - oneOffs;
 
@@ -166,23 +199,6 @@ export function project(plan: Plan, key: ScenarioKey = 'baseline'): Projection {
       unfunded -= repay;
     }
 
-    // ---- CPF (modelled below 55 only) ----
-    const cpfModelled = age < 55;
-    if (cpfModelled) {
-      const interest = annualCpfInterest(cpf);
-      const alloc = allocate(m.total * workMonths, age);
-      cpf = {
-        oa: cpf.oa + interest.oa + alloc.oa,
-        sa: cpf.sa + interest.sa + alloc.sa,
-        ma: cpf.ma + interest.ma + alloc.ma,
-      };
-      const bhs = BHS_2026 * Math.pow(1 + BHS_GROWTH, t);
-      if (cpf.ma > bhs) {
-        cpf.sa += cpf.ma - bhs;
-        cpf.ma = bhs;
-      }
-    }
-
     const liquid = cash + inv;
     const endInfl = Math.pow(1 + s.inflation, t + 1);
     rows.push({
@@ -209,6 +225,7 @@ export function project(plan: Plan, key: ScenarioKey = 'baseline'): Projection {
       cpfTotal: round(cpfTotal(cpf)),
       cpfReal: round(cpfTotal(cpf) / endInfl),
       cpfModelled,
+      cpfHousing: round(cpfHousing),
       shortfall: round(shortfall),
       monthlySpend: round(monthlySpend),
       spendByCategory: byCategory,

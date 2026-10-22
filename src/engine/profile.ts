@@ -12,7 +12,7 @@ export type LifeStatus =
   | 'self_employed'
   | 'alt_path';
 
-export type Living = 'family' | 'room' | 'whole_unit' | 'other';
+export type Living = 'family' | 'room' | 'whole_unit' | 'own' | 'other';
 
 export interface Profile {
   nickname: string;
@@ -35,6 +35,10 @@ export interface Profile {
   lifestyle: number;
   familyAllowance: number;
   studentLoan: boolean;
+  /** Only used when living === 'own'. Monthly home-loan instalment, the part paid from CPF OA, and years left. */
+  homeLoanMonthly: number;
+  homeLoanCpf: number;
+  homeLoanYears: number;
 }
 
 export type AspirationId =
@@ -126,6 +130,9 @@ export function defaultProfile(age = 22, status: LifeStatus = 'uni_student'): Pr
     lifestyle: COST_DEFAULTS.lifestyle,
     familyAllowance: working ? COST_DEFAULTS.familyAllowance : 100,
     studentLoan: false,
+    homeLoanMonthly: 0,
+    homeLoanCpf: 0,
+    homeLoanYears: 0,
   };
 }
 

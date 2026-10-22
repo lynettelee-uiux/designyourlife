@@ -127,6 +127,37 @@ describe('interconnected decisions', () => {
   });
 });
 
+describe('owning a home with a CPF-paid loan', () => {
+  const owner = () => ({ ...worker(), living: 'own' as const, homeLoanMonthly: 1200, homeLoanCpf: 1000, homeLoanYears: 25, cpfTotal: 20000 });
+
+  it('takes the CPF part from OA and treats the rest as a cash housing cost', () => {
+    const plan = buildPlan({ profile: owner(), dreams: {}, habits: {} });
+    const noLoan = buildPlan({ profile: { ...owner(), homeLoanMonthly: 0, homeLoanCpf: 0 }, dreams: {}, habits: {} });
+    const a = project(plan).rows[0];
+    const b = project(noLoan).rows[0];
+    expect(a.cpfHousing).toBe(12000);
+    expect(b.cpf.oa - a.cpf.oa).toBeCloseTo(12000, 0); // same contributions; OA lower by the instalments
+    expect(monthlySnapshot(plan, 23).byCategory.housing).toBeCloseTo(200 + 250, 0); // $200 cash part + running costs
+  });
+
+  it('pays in cash whatever OA cannot cover, without OA going negative', () => {
+    const p = { ...owner(), cpfTotal: 0, homeLoanCpf: 2500, homeLoanMonthly: 2500 };
+    const rows = project(buildPlan({ profile: p, dreams: {}, habits: {} })).rows;
+    for (const r of rows) expect(r.cpf.oa).toBeGreaterThanOrEqual(-0.01);
+    const r0 = rows[0];
+    expect(r0.cpfHousing).toBeLessThan(30000);
+    expect(r0.spending).toBeGreaterThan(project(buildPlan({ profile: { ...p, homeLoanCpf: 0, homeLoanMonthly: 0 }, dreams: {}, habits: {} })).rows[0].spending);
+  });
+
+  it('stops deductions when the loan ends and ignores an "own a home" dream', () => {
+    const plan = buildPlan({ profile: { ...owner(), homeLoanYears: 5 }, dreams: { own_home: { id: 'own_home' } }, habits: {} });
+    const rows = project(plan).rows;
+    expect(rows.find((r) => r.age === 27)!.cpfHousing).toBeGreaterThan(0);
+    expect(rows.find((r) => r.age === 28)!.cpfHousing).toBe(0);
+    expect(plan.recurring.find((r) => r.id === 'home-costs')).toBeUndefined();
+  });
+});
+
 describe('scenario ordering', () => {
   it('favourable ≥ baseline ≥ challenging liquid assets at 45 for a typical saver', () => {
     const plan = buildPlan({ profile: worker(), dreams: {}, habits: { windfall: 'invest' } });

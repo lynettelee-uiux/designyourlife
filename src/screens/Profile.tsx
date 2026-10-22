@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { ActionBar, AVATAR_IDS, Avatar, Button, Card, Note, NumberField, OptionGroup, Screen, Slider, StageIntro, TextField, cx } from '../components/ui';
+import { ActionBar, AVATAR_IDS, Avatar, Button, Card, Disclosure, Note, NumberField, OptionGroup, Screen, Slider, StageIntro, TextField, cx } from '../components/ui';
 import { COST_DEFAULTS } from '../engine/assumptions';
 import { money } from '../engine/format';
 import { paycheck } from '../engine/paycheck';
-import { STATUS_INFO, applyStatusDefaults, surpriseCharacter, type LifeStatus, type Living } from '../engine/profile';
+import { STATUS_INFO, applyStatusDefaults, surpriseCharacter, type LifeStatus, type Living, type Profile } from '../engine/profile';
 import { useStore } from '../state/store';
 
-const STEPS = ['You', 'Right now', 'Rules', 'Home', 'Money', 'Review'];
+// Only three questions are asked up front. Everything else has a sensible default
+// and lives under "Adjust details" on the Ready step (and is reachable later from the header).
+const STEPS = ['You', 'Right now', 'Home', 'Ready'];
+
 const STATUS_ICON: Record<LifeStatus, string> = {
   uni_student: 'GraduationCap',
   poly_student: 'GraduationCap',
@@ -19,16 +22,35 @@ const STATUS_ICON: Record<LifeStatus, string> = {
   alt_path: 'Sparkles',
 };
 
+const LIVING_LABEL: Record<Living, string> = {
+  family: 'With family',
+  room: 'Renting a room',
+  whole_unit: 'Renting a place (shared)',
+  own: 'Own home, paying a loan',
+  other: 'Other',
+};
+
+const RESIDENCY_LABEL = { citizen: 'Singapore Citizen', pr: 'Permanent Resident', other: 'Other', undisclosed: 'Prefer not to say' } as const;
+
 export default function ProfileScreen() {
   const { state, dispatch } = useStore();
   const [step, setStep] = useState(Math.min(state.step ?? 0, STEPS.length - 1));
   const p = state.profile;
-  const set = (patch: Partial<typeof p>) => dispatch({ type: 'profile', profile: patch });
+  const set = (patch: Partial<Profile>) => dispatch({ type: 'profile', profile: patch });
   const last = step === STEPS.length - 1;
-  const notWorkingYet = p.mainIncomeAge > p.age;
-  const info = STATUS_INFO[p.status];
 
-  const next = () => (last ? dispatch({ type: 'go', stage: 'dream' }) : setStep(step + 1));
+  const setLiving = (v: Living) => {
+    const patch: Partial<Profile> = { living: v, essentials: v === 'family' ? COST_DEFAULTS.essentialsWithFamily : COST_DEFAULTS.essentialsIndependent };
+    if (v === 'own' && !p.homeLoanMonthly) Object.assign(patch, { homeLoanMonthly: COST_DEFAULTS.homeLoanMonthly, homeLoanCpf: COST_DEFAULTS.homeLoanFromCpf, homeLoanYears: COST_DEFAULTS.homeLoanYears });
+    set(patch);
+    // An existing home makes the "own a home" and "live on my own" dreams redundant.
+    if (v === 'own' && (state.dreams.own_home || state.dreams.live_independently)) {
+      const d = { ...state.dreams };
+      delete d.own_home;
+      delete d.live_independently;
+      dispatch({ type: 'dreams', dreams: d });
+    }
+  };
 
   return (
     <Screen>
@@ -43,7 +65,7 @@ export default function ProfileScreen() {
 
       {step === 0 && (
         <>
-          <StageIntro eyebrow="Before we begin" title="First, what should we call you?">
+          <StageIntro eyebrow="Three quick questions" title="First, what should we call you?">
             A nickname is perfect. We never ask for your real name, NRIC or bank details.
           </StageIntro>
           <Card className="rise-2 space-y-5">
@@ -76,8 +98,8 @@ export default function ProfileScreen() {
 
       {step === 1 && (
         <>
-          <StageIntro eyebrow="Right now" title="Where are you in life at the moment?">
-            Everyone’s path is different. Pick what fits best — you can change it later.
+          <StageIntro eyebrow="2 of 3" title="Where are you in life right now?">
+            Everyone’s path is different. Pick what fits best.
           </StageIntro>
           <Card className="rise-2 space-y-5">
             <Slider label="Your age" value={p.age} min={18} max={35} onChange={(v) => set({ age: v, mainIncomeAge: Math.max(v, v + (p.mainIncomeAge - p.age)) })} format={(v) => `${v}`} />
@@ -93,146 +115,88 @@ export default function ProfileScreen() {
 
       {step === 2 && (
         <>
-          <StageIntro eyebrow="The rules that apply" title="Which of these fits you?">
-            This only changes which CPF rules we apply. Skip it if you’d rather not say.
-          </StageIntro>
-          <Card className="rise-2">
-            <OptionGroup
-              legend="Residency"
-              value={p.residency}
-              onChange={(v) => set({ residency: v })}
-              options={[
-                { value: 'citizen', label: 'Singapore Citizen', hint: 'Full CPF rules apply to salaried work' },
-                { value: 'pr', label: 'Permanent Resident', hint: 'CPF applies; rates are lower in your first two years (we approximate)' },
-                { value: 'other', label: 'Other', hint: 'No CPF — your own savings do more of the work' },
-                { value: 'undisclosed', label: 'Prefer not to say', hint: 'We’ll use Singapore Citizen rules' },
-              ]}
-            />
-          </Card>
-        </>
-      )}
-
-      {step === 3 && (
-        <>
-          <StageIntro eyebrow="Home & family" title="Where do you live, and who do you support?">
-            All optional. These shape your monthly costs.
+          <StageIntro eyebrow="3 of 3" title="Where do you live?">
+            This shapes your monthly costs more than anything else.
           </StageIntro>
           <Card className="rise-2 space-y-5">
             <OptionGroup<Living>
               legend="Living arrangement"
+              hideLegend
               value={p.living}
-              onChange={(v) => set({ living: v, essentials: v === 'family' ? COST_DEFAULTS.essentialsWithFamily : COST_DEFAULTS.essentialsIndependent })}
+              onChange={setLiving}
               options={[
-                { value: 'family', label: 'With family', icon: 'Users' },
-                { value: 'room', label: 'Renting a room', icon: 'KeyRound' },
-                { value: 'whole_unit', label: 'Renting a whole place (shared)', icon: 'Home' },
+                { value: 'family', label: LIVING_LABEL.family, icon: 'Users' },
+                { value: 'room', label: LIVING_LABEL.room, icon: 'KeyRound' },
+                { value: 'whole_unit', label: LIVING_LABEL.whole_unit, icon: 'Home' },
+                { value: 'own', label: 'I own a home (paying a loan)', hint: 'Alone or with a partner', icon: 'Home' },
                 { value: 'other', label: 'Other (hostel, camp, etc.)', icon: 'Compass' },
               ]}
-              columns={2}
             />
-            <NumberField label="Monthly allowance you give your family (optional)" prefix="$" value={p.familyAllowance} onChange={(v) => set({ familyAllowance: v })} max={5000} help="Many young Singaporeans contribute at home. Put 0 if not." />
-            <label className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-2xl border border-mist-300 bg-white px-4 py-3">
-              <input type="checkbox" className="h-5 w-5 accent-navy-800" checked={p.studentLoan} onChange={(e) => set({ studentLoan: e.target.checked })} />
-              <span className="text-[15px]">
-                <span className="font-semibold">I have (or expect) a student loan</span>
-                <span className="block text-xs text-ink-mute">We use an illustrative $250/month repayment for 10 years once you start main work.</span>
-              </span>
-            </label>
+            {p.living === 'own' && <HomeLoanFields />}
           </Card>
         </>
       )}
 
-      {step === 4 && (
-        <>
-          <StageIntro eyebrow="Your money" title="Made-up numbers or your own rough ones?">
-            Both work. Approximate is fine, and everything stays in this browser.
-          </StageIntro>
-          <div className="rise-2 mb-4 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Finance mode">
-            {(['fictional', 'personal'] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                role="radio"
-                aria-checked={p.financeMode === m}
-                onClick={() => set({ financeMode: m })}
-                className={cx('min-h-[64px] rounded-2xl border px-4 py-3 text-left', p.financeMode === m ? 'border-ink bg-navy-50' : 'border-mist-300 bg-white')}
-              >
-                <span className="block text-[15px] font-semibold">{m === 'fictional' ? 'Fictional' : 'My rough figures'}</span>
-                <span className="block text-xs text-ink-mute">{m === 'fictional' ? 'Typical figures for your situation' : 'Ballpark numbers, all skippable'}</span>
-              </button>
-            ))}
-          </div>
-          <Card className="space-y-4">
-            {p.financeMode === 'fictional' && <Note>These are typical starting figures for a {info.label.toLowerCase()} based on 2023–2025 graduate surveys and 2026 costs. Tweak anything that doesn’t feel right.</Note>}
-            {p.status !== 'between_jobs' && <NumberField label={notWorkingYet ? `Current monthly income (${info.kind === 'allowance' ? 'NS allowance' : 'part-time'})` : 'Monthly income (gross)'} prefix="$" value={notWorkingYet ? p.currentIncome : p.mainIncome} onChange={(v) => set(notWorkingYet ? { currentIncome: v } : { mainIncome: v, currentIncome: v })} max={30000} />}
-            {notWorkingYet && (
-              <div className="grid grid-cols-2 gap-3">
-                <NumberField label="Main work starts at age" value={p.mainIncomeAge} min={p.age} max={40} onChange={(v) => set({ mainIncomeAge: v })} />
-                <NumberField label="Expected monthly pay" prefix="$" value={p.mainIncome} onChange={(v) => set({ mainIncome: v })} max={30000} />
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <NumberField label="Cash savings" prefix="$" value={p.cash} onChange={(v) => set({ cash: v })} max={2000000} />
-              <NumberField label="Investments" prefix="$" value={p.investments} onChange={(v) => set({ investments: v })} max={2000000} />
-            </div>
-            <NumberField label="CPF balance, all accounts (optional)" prefix="$" value={p.cpfTotal} onChange={(v) => set({ cpfTotal: v })} max={2000000} help="Rough is fine. We split it across accounts using 2026 allocation ratios." />
-            <div className="grid grid-cols-2 gap-3">
-              <NumberField label="Essentials / month" prefix="$" value={p.essentials} onChange={(v) => set({ essentials: v })} max={10000} help="Food, transport, phone" />
-              <NumberField label="Lifestyle / month" prefix="$" value={p.lifestyle} onChange={(v) => set({ lifestyle: v })} max={10000} help="Social, shopping, hobbies" />
-            </div>
-            <label className="flex cursor-pointer items-start gap-3 pt-1 text-sm">
-              <input type="checkbox" className="mt-0.5 h-5 w-5 accent-navy-800" checked={state.saveLocally} onChange={(e) => dispatch({ type: 'saveLocally', value: e.target.checked })} />
-              <span>
-                <span className="font-semibold">Remember my progress on this device</span>
-                <span className="block text-xs text-ink-mute">Stored only in this browser’s local storage. Nothing is sent to a server. You can clear it any time from the menu.</span>
-              </span>
-            </label>
-          </Card>
-        </>
-      )}
-
-      {last && <Review onEdit={setStep} />}
+      {last && <Ready onEdit={setStep} />}
 
       <ActionBar>
         <Button variant="ghost" icon="ArrowLeft" onClick={() => (step === 0 ? dispatch({ type: 'go', stage: 'welcome' }) : setStep(step - 1))}>
           Back
         </Button>
-        <div className="flex gap-2">
-          {!last && step > 0 && (
-            <Button variant="secondary" onClick={() => setStep(step + 1)}>
-              Skip
-            </Button>
-          )}
-          <Button iconRight="ArrowRight" onClick={next} disabled={step === 0 && !p.nickname.trim()}>
-            {last ? 'Imagine my future' : 'Next'}
-          </Button>
-        </div>
+        <Button iconRight="ArrowRight" onClick={() => (last ? dispatch({ type: 'go', stage: 'dream' }) : setStep(step + 1))} disabled={step === 0 && !p.nickname.trim()}>
+          {last ? 'Imagine my future' : 'Next'}
+        </Button>
       </ActionBar>
     </Screen>
   );
 }
 
-function Review({ onEdit }: { onEdit: (s: number) => void }) {
-  const { state } = useStore();
+function HomeLoanFields() {
+  const { state, dispatch } = useStore();
   const p = state.profile;
+  const set = (patch: Partial<Profile>) => dispatch({ type: 'profile', profile: patch });
+  const cash = Math.max(0, p.homeLoanMonthly - p.homeLoanCpf);
+  return (
+    <div className="space-y-3 rounded-2xl bg-mist-50 p-4">
+      <p className="text-sm font-semibold">Your home loan (rough is fine)</p>
+      <div className="grid grid-cols-2 gap-3">
+        <NumberField label="Monthly instalment" prefix="$" value={p.homeLoanMonthly} max={20000} onChange={(v) => set({ homeLoanMonthly: v, homeLoanCpf: Math.min(p.homeLoanCpf, v) })} />
+        <NumberField label="Paid from your CPF" prefix="$" value={p.homeLoanCpf} max={p.homeLoanMonthly} onChange={(v) => set({ homeLoanCpf: v })} />
+      </div>
+      <NumberField label="Years left on the loan" value={p.homeLoanYears} max={35} onChange={(v) => set({ homeLoanYears: v })} />
+      <p className="text-xs leading-relaxed text-ink-mute">
+        {cash > 0 ? `${money(cash)} a month comes from your take-home pay. ` : 'All of it comes from CPF. '}
+        Your share only, if you bought with someone. The CPF part comes out of your Ordinary Account, so it won’t build up there. Not sure? Your loan statement or the housing section in my cpf will show it. The starting figures are illustrative.
+      </p>
+    </div>
+  );
+}
+
+/** Summary + optional details. Nothing here is required to continue. */
+function Ready({ onEdit }: { onEdit: (s: number) => void }) {
+  const { state, dispatch } = useStore();
+  const p = state.profile;
+  const set = (patch: Partial<Profile>) => dispatch({ type: 'profile', profile: patch });
   const info = STATUS_INFO[p.status];
+  const notWorkingYet = p.mainIncomeAge > p.age;
   const pay = paycheck(p.mainIncome, Math.max(p.age, p.mainIncomeAge), p.residency, info.mainKind, 2026);
+
   const rows: [string, string, number][] = [
     ['Right now', `${p.age} · ${info.label}`, 1],
-    ['Residency', { citizen: 'Singapore Citizen', pr: 'Permanent Resident', other: 'Other', undisclosed: 'Prefer not to say' }[p.residency], 2],
-    ['Home', { family: 'With family', room: 'Renting a room', whole_unit: 'Renting a place', other: 'Other' }[p.living] + (p.familyAllowance ? ` · gives ${money(p.familyAllowance)}/mo at home` : ''), 3],
-    ['Main income', p.mainIncomeAge > p.age ? `${money(p.mainIncome)}/mo from age ${p.mainIncomeAge}` : `${money(p.mainIncome)}/mo`, 4],
-    ['Savings', `${money(p.cash)} cash · ${money(p.investments)} invested`, 4],
+    ['Home', LIVING_LABEL[p.living] + (p.living === 'own' && p.homeLoanCpf ? ` · ${money(p.homeLoanCpf)}/mo from CPF` : ''), 2],
   ];
+
   return (
     <>
-      <StageIntro eyebrow="Your starting point" title={<>Nice to meet you, {p.nickname || 'friend'}.</>}>Here’s who we’ll be simulating. Tap any line to change it.</StageIntro>
+      <StageIntro eyebrow="You’re all set" title={<>Nice to meet you, {p.nickname || 'friend'}.</>}>
+        We’ve filled in the rest with typical figures for someone like you. Change anything now, or later from your avatar at the top.
+      </StageIntro>
       <Card className="rise-2">
-        <div className="mb-4 flex items-center gap-3">
+        <div className="mb-3 flex items-center gap-3">
           <Avatar id={p.avatar} size="lg" />
           <div>
             <p className="display text-xl">{p.nickname || 'Friend'}</p>
-            <p className="text-sm text-ink-mute">{p.financeMode === 'fictional' ? 'Fictional figures' : 'Your rough figures'}</p>
+            <p className="text-sm text-ink-mute">{p.financeMode === 'fictional' ? 'Using typical figures' : 'Using your rough figures'}</p>
           </div>
         </div>
         <dl className="divide-y divide-mist-200">
@@ -246,6 +210,10 @@ function Review({ onEdit }: { onEdit: (s: number) => void }) {
               </dd>
             </div>
           ))}
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <dt className="text-sm text-ink-mute">Income</dt>
+            <dd className="text-right text-sm font-semibold">{notWorkingYet ? `${money(p.mainIncome)}/mo from age ${p.mainIncomeAge}` : `${money(p.mainIncome)}/mo`}</dd>
+          </div>
         </dl>
         {pay.cpfModelled && (
           <p className="mt-3 rounded-2xl bg-blush-50 p-3 text-[13px] leading-relaxed">
@@ -253,6 +221,77 @@ function Review({ onEdit }: { onEdit: (s: number) => void }) {
           </p>
         )}
       </Card>
+
+      <div className="mt-4 space-y-2">
+        <p className="text-sm font-semibold text-ink-soft">Adjust details (optional)</p>
+        <Disclosure summary={<span>Income & savings <span className="font-normal text-ink-mute">· {p.financeMode === 'fictional' ? 'typical figures' : 'your figures'}</span></span>}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Finance mode">
+              {(['fictional', 'personal'] as const).map((m) => (
+                <button key={m} type="button" role="radio" aria-checked={p.financeMode === m} onClick={() => set({ financeMode: m })} className={cx('min-h-[52px] rounded-2xl border px-3 py-2 text-left', p.financeMode === m ? 'border-ink bg-navy-50' : 'border-mist-300 bg-white')}>
+                  <span className="block text-sm font-semibold text-ink">{m === 'fictional' ? 'Typical figures' : 'My rough figures'}</span>
+                </button>
+              ))}
+            </div>
+            {p.status !== 'between_jobs' && (
+              <NumberField
+                label={notWorkingYet ? `Current monthly income (${info.kind === 'allowance' ? 'NS allowance' : 'part-time'})` : 'Monthly income (gross)'}
+                prefix="$"
+                value={notWorkingYet ? p.currentIncome : p.mainIncome}
+                onChange={(v) => set(notWorkingYet ? { currentIncome: v } : { mainIncome: v, currentIncome: v })}
+                max={30000}
+              />
+            )}
+            {notWorkingYet && (
+              <div className="grid grid-cols-2 gap-3">
+                <NumberField label="Main work starts at age" value={p.mainIncomeAge} min={p.age} max={40} onChange={(v) => set({ mainIncomeAge: v })} />
+                <NumberField label="Expected monthly pay" prefix="$" value={p.mainIncome} onChange={(v) => set({ mainIncome: v })} max={30000} />
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <NumberField label="Cash savings" prefix="$" value={p.cash} onChange={(v) => set({ cash: v })} max={2000000} />
+              <NumberField label="Investments" prefix="$" value={p.investments} onChange={(v) => set({ investments: v })} max={2000000} />
+            </div>
+            <NumberField label="CPF balance, all accounts" prefix="$" value={p.cpfTotal} onChange={(v) => set({ cpfTotal: v })} max={2000000} help="Rough is fine. We split it across accounts using 2026 allocation ratios." />
+            <div className="grid grid-cols-2 gap-3">
+              <NumberField label="Essentials / month" prefix="$" value={p.essentials} onChange={(v) => set({ essentials: v })} max={10000} help="Food, transport, phone" />
+              <NumberField label="Lifestyle / month" prefix="$" value={p.lifestyle} onChange={(v) => set({ lifestyle: v })} max={10000} help="Social, shopping, hobbies" />
+            </div>
+          </div>
+        </Disclosure>
+        <Disclosure summary={<span>Family & loans <span className="font-normal text-ink-mute">· gives {money(p.familyAllowance)}/mo at home{p.studentLoan ? ' · student loan' : ''}</span></span>}>
+          <div className="space-y-4">
+            <NumberField label="Monthly allowance you give your family" prefix="$" value={p.familyAllowance} onChange={(v) => set({ familyAllowance: v })} max={5000} help="Put 0 if you don’t." />
+            <label className="flex min-h-[44px] cursor-pointer items-center gap-3">
+              <input type="checkbox" className="h-5 w-5 accent-navy-800" checked={p.studentLoan} onChange={(e) => set({ studentLoan: e.target.checked })} />
+              <span className="text-sm text-ink">
+                <span className="font-semibold">I have (or expect) a student loan</span>
+                <span className="block text-xs text-ink-mute">Illustrative $250/month for 10 years once main work starts.</span>
+              </span>
+            </label>
+            {p.living === 'own' && <HomeLoanFields />}
+          </div>
+        </Disclosure>
+        <Disclosure summary={<span>Residency <span className="font-normal text-ink-mute">· {RESIDENCY_LABEL[p.residency]}</span></span>}>
+          <OptionGroup
+            legend="Residency (changes which CPF rules apply)"
+            value={p.residency}
+            onChange={(v) => set({ residency: v })}
+            options={[
+              { value: 'citizen', label: 'Singapore Citizen', hint: 'Full CPF rules for salaried work' },
+              { value: 'pr', label: 'Permanent Resident', hint: 'Lower CPF rates in your first two years (we approximate)' },
+              { value: 'other', label: 'Other', hint: 'No CPF — your own savings do more of the work' },
+              { value: 'undisclosed', label: 'Prefer not to say', hint: 'We’ll use Singapore Citizen rules' },
+            ]}
+          />
+        </Disclosure>
+        <Note icon="Lock">
+          <label className="flex cursor-pointer items-start gap-2.5">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-navy-800" checked={state.saveLocally} onChange={(e) => dispatch({ type: 'saveLocally', value: e.target.checked })} />
+            <span>Remember my progress on this device. Stored only in this browser — nothing is sent anywhere.</span>
+          </label>
+        </Note>
+      </div>
     </>
   );
 }

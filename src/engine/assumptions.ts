@@ -249,6 +249,10 @@ export const COST_DEFAULTS = {
   longHaulTrip: 4500,
   studentLoanMonthly: 250,
   childMonthly: 1200,
+  ownHomeRunning: 250, // S&CC, utilities, upkeep for an owned flat (illustrative)
+  homeLoanMonthly: 1200, // illustrative starting suggestion only
+  homeLoanFromCpf: 1000,
+  homeLoanYears: 25,
 };
 export const COST_META: AssumptionMeta = {
   label: 'Everyday cost defaults (food, rent, pets, travel)',

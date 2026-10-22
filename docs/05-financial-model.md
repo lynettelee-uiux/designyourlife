@@ -25,7 +25,8 @@ For each age from today to 65, per scenario:
 5. **Spending.** Every recurring item (today's $) × (1 + inflation)^t unless marked nominal (loan repayments, insurance premiums, instalments). In retirement, a single all-in monthly lifestyle figure replaces itemised spending. One-off costs (or windfalls) at their age, inflated.
 6. **Saving & investing.** Surplus funds planned investing first (never more than the surplus — no borrowing to invest), the rest to cash. Investments return the scenario rate for the chosen risk level (contributions get half a year's return). In the downturn year the return is −8% / −20% / −35% (steady / balanced / bold). "Sell" realises into cash and stops investing; "hold" pauses contributions that year.
 7. **Deficits.** Drawn from cash, then investments. Any remainder is recorded as an **unfunded shortfall** that is carried forward and must be repaid from later surpluses before savings rebuild (no interest modelled — this understates the cost of borrowing). Charts show **net** position (savings − unfunded), so below $0 means borrowing would have been needed.
-8. **CPF balances (to 55 only).** Annual interest on opening balances (OA 2.5%, SA/MA 4%, +1% on first $60k with OA capped at $20k, credited to SA) plus that year's allocated contributions. MediSave above the BHS ($79,000 in 2026, grown 3.5%/yr illustratively) overflows to SA. From 55 the Retirement Account rules apply and are **not modelled**.
+8. **Home loan from CPF (owners).** The CPF-paid part of the instalment is deducted from OA each year after contributions; anything OA can't cover is paid in cash and added to housing spending. The cash part and running costs (~$250/month, illustrative) are housing costs. Deductions stop when the loan ends.
+9. **CPF balances (to 55 only). Annual interest on opening balances (OA 2.5%, SA/MA 4%, +1% on first $60k with OA capped at $20k, credited to SA) plus that year's allocated contributions. MediSave above the BHS ($79,000 in 2026, grown 3.5%/yr illustratively) overflows to SA. From 55 the Retirement Account rules apply and are **not modelled**.
 
 Accounting identity tested every year: Δ(cash + investments) = take-home − spending − one-offs + investment return + cash interest.
 
@@ -52,9 +53,9 @@ Ratio-based: ≥ 100% → **On track under current assumptions**; ≥ 70% → **
 Each dream is costed on its own (from zero savings, so goals don't double-count the same money): inflated cost at target age, years to prepare, recurring cost, and level monthly saving needed at ~1% (cash) vs an illustrative 4% (invested, not guaranteed).
 
 ## Simplifications to be aware of
-Annual (not monthly) CPF interest; no bonuses/AW; PR graduated rates approximated by full rates (flagged); tax paid in same year; no CPF housing use; no CPF after 55; no mortgage; insurance and student-loan amounts are placeholders; no interest on unfunded shortfalls; investment returns are deterministic per scenario (no volatility sequence other than the one downturn).
+Annual (not monthly) CPF interest; no bonuses/AW; PR graduated rates approximated by full rates (flagged); tax paid in same year; CPF housing use only for an existing loan (no new purchases, accrued-interest refund rules or valuation limits); no CPF after 55; no mortgage; insurance and student-loan amounts are placeholders; no interest on unfunded shortfalls; investment returns are deterministic per scenario (no volatility sequence other than the one downturn).
 
-## Tests (`npm test` — 56 tests)
+## Tests (`npm test` — 59 tests)
 - `cpf.test.ts`: rates, ceiling, $50/$500/$750 bands, CPF rounding, year-table fallback, allocation against CPF's worked example, interest caps, eligibility.
 - `tax-paycheck-finance.test.ts`: tax bands, reliefs, paycheck split, NS allowance, PR note, TVM helpers.
 - `projection.test.ts`: money conservation across scenarios, CPF separate from spendable money, no employer-CPF double count, CPF stops at 55, shortfall handling and repayment, career break months, interconnections (pet → runway; rent → surplus; downturn sell), scenario ordering, 200 generated characters with finite outputs.

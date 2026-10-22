@@ -76,6 +76,12 @@ function PaycheckTool({ profile }: { profile: Profile }) {
             <div><dt className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#2E9A6B]" />Special</dt><dd className="tabular font-semibold">{money(p.allocation.sa)}</dd><dd className="text-ink-mute">retirement</dd></div>
             <div><dt className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#D8137A]" />MediSave</dt><dd className="tabular font-semibold">{money(p.allocation.ma)}</dd><dd className="text-ink-mute">healthcare</dd></div>
           </dl>
+          {profile.living === 'own' && profile.homeLoanCpf > 0 && (
+            <p className="mt-3 text-xs leading-relaxed text-ink-soft">
+              Your home loan takes about <strong>{money(profile.homeLoanCpf)}</strong> a month from your Ordinary Account
+              {profile.homeLoanCpf > p.allocation.oa ? ` — more than the ${money(p.allocation.oa)} going in, so your OA shrinks until it runs out, then the rest comes from cash.` : `, leaving about ${money(p.allocation.oa - profile.homeLoanCpf)} a month to build up there.`}
+            </p>
+          )}
         </div>
       )}
       {p.notes.map((n) => (
