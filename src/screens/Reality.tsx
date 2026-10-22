@@ -98,6 +98,7 @@ export default function Reality() {
               </div>
 
               <p className="mt-3 text-[16px] leading-snug">{g.headline}</p>
+              {g.why && g.status !== 'on_track' && <p className="mt-1.5 text-sm leading-snug text-ink-soft"><strong className="text-ink">Why: </strong>{g.why}</p>}
 
               {g.gap && (
                 <div className="mt-3 flex gap-2.5 rounded-2xl bg-blush-100 p-3.5 text-[14px] leading-relaxed">

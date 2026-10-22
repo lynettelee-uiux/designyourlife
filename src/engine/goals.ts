@@ -27,6 +27,8 @@ export interface GoalResult {
   progress: number;
   /** Plain-language "what would close the gap", when there is one. */
   gap?: string;
+  /** Plain-language cause of the distance (why it isn't within reach), when not on track. */
+  why?: string;
 }
 
 const fromRatio = (r: number): GoalStatus => (r >= 1 ? 'on_track' : r >= 0.7 ? 'adjust' : 'explore');
@@ -271,7 +273,7 @@ const clamp01 = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n))
  * what could close the gap. Ratio goals use have ÷ need; monthly-budget goals use the margin left
  * after costs (10% of take-home counts as comfortable).
  */
-export function goalDistance(id: AspirationId, status: GoalStatus, plan: Plan, proj: Projection, profile: Profile, dreams: Dreams): { progress: number; gap?: string } {
+export function goalDistance(id: AspirationId, status: GoalStatus, plan: Plan, proj: Projection, profile: Profile, dreams: Dreams): { progress: number; gap?: string; why?: string } {
   const d = resolveDream(dreams[id]!, profile);
   const s = SCENARIOS[proj.scenario];
   const a = plan.startAge;
@@ -288,12 +290,21 @@ export function goalDistance(id: AspirationId, status: GoalStatus, plan: Plan, p
     const progress = status === 'on_track' ? 1 : status === 'adjust' ? 0.7 + 0.25 * margin : 0.6 * margin;
     if (status === 'on_track') return { progress };
     const free = Math.max(0, comfy - snap.surplus);
+    const others = Object.keys(dreams).length > 1 ? ' (including your other dreams)' : '';
     if (free < 10) {
       // Monthly budget is fine at this age; the pressure comes from other commitments later on.
       const short = proj.firstShortfallAge;
-      return { progress, gap: `This one fits your monthly budget, but your savings could run short${short !== undefined ? ` around ${short}` : ''} once your other dreams start — easing those, or ${what}, would help.` };
+      return {
+        progress,
+        why: `On its own it fits, but with your other plans your savings could run short${short !== undefined ? ` around ${short}` : ''}.`,
+        gap: `This one fits your monthly budget, but your savings could run short${short !== undefined ? ` around ${short}` : ''} once your other dreams start — easing those, or ${what}, would help.`,
+      };
     }
-    return { progress, gap: `Freeing up about ${money(free)} a month at ${age} — or ${what} — would give you breathing room.` };
+    const why =
+      snap.surplus < 0
+        ? `At ${age}, monthly costs${others} would be about ${money(-snap.surplus)} more than your take-home pay.`
+        : `At ${age}, only about ${money(snap.surplus)} a month would be left after costs${others} — a comfortable margin is around ${money(comfy)}.`;
+    return { progress, why, gap: `Freeing up about ${money(free)} a month at ${age} — or ${what} — would give you breathing room.` };
   };
 
   switch (id) {
