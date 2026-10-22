@@ -4,6 +4,10 @@
 
 A mobile-first, personalised financial life simulator prototype for Singapore youths (20–24). Users imagine the future they want, see what it might take, make life decisions in a branching story, and explore how changing one thing reshapes their outlook — using simplified 2026 Singapore rules (CPF, tax, inflation).
 
+**Two versions, one engine**
+- **Full** (`/`): ~8–10 minutes — 12 dreams, reality check, habit questions, a 5–7 chapter life story, outlook, Change One Thing and six tools.
+- **Lite** (`/lite/`): ~3 minutes, 4 screens — age/situation/living → pick up to 3 of 6 dreams with a live near/far verdict → one unexpected life moment → results with the biggest-pressure insight and two "change one thing" sliders. No saving; typical figures only. Code in `src/lite/`.
+
 > Educational illustration only — not a prediction and not financial advice. No accounts, no real data required, nothing leaves the browser.
 
 ## Quick start
@@ -18,12 +22,12 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173.
+Open http://localhost:5173 (full) or http://localhost:5173/lite/ (Lite).
 
 | Script | What it does |
 |---|---|
 | `npm run dev` | Dev server with hot reload |
-| `npm test` | Run 61 automated tests (CPF, tax, projections, scenarios) |
+| `npm test` | Run 64 automated tests (CPF, tax, projections, scenarios) |
 | `npm run typecheck` | TypeScript strict check |
 | `npm run build` | Type-check and build static files to `dist/` |
 | `npm run preview` | Serve the production build locally |
@@ -51,6 +55,8 @@ src/
   state/             App store (useReducer + localStorage) and engine glue (sim.ts)
   components/        UI kit, chart, tools
   screens/           Welcome, Profile, Dream, Reality, Habits, LifeHappens, Outlook, NextMove, About
+  lite/              Design Your Life (Lite): LiteApp, liteSim (+ tests), entry point
+lite/index.html      Lite page entry
 docs/                Research, personas, journey, design system, model, scenario schema, limitations
 ```
 

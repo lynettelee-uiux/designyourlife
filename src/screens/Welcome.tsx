@@ -44,6 +44,10 @@ export default function Welcome() {
         </Button>
       )}
 
+      <a href="./lite/" className="mt-3 self-center text-sm font-semibold text-ink-soft underline underline-offset-4 hover:text-ink">
+        Short on time? Try the 3-minute Lite version
+      </a>
+
       <ul className="mt-10 space-y-3 text-sm text-ink-soft">
         <li className="flex gap-3"><Icon name="Lock" className="mt-0.5 h-4 w-4 shrink-0" /> No sign-up, no NRIC, no bank details. Use a nickname and made-up numbers if you like.</li>
         <li className="flex gap-3"><Icon name="Lightbulb" className="mt-0.5 h-4 w-4 shrink-0" /> An educational simulation using 2026 Singapore rules — not a prediction or financial advice.</li>

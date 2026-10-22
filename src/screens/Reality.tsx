@@ -20,7 +20,7 @@ export default function Reality() {
   // Dreams that need most attention first.
   const sorted = [...goals].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || a.progress - b.progress);
   const headline =
-    near === goals.length ? 'Every dream looks within reach' : near === 0 ? 'Your dreams are further away — for now' : `${near} of ${goals.length} dreams look within reach`;
+    near === goals.length ? 'Every dream looks within reach' : near === 0 ? 'Your dreams are further away — for now' : `${near} of ${goals.length} dreams ${near === 1 ? 'looks' : 'look'} within reach`;
 
   return (
     <Screen>
