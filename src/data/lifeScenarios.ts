@@ -5,7 +5,7 @@
 // long-term consequences are always computed from the same model as the outlook.
 
 import { COST_DEFAULTS, DOWNTURN_DROP } from '../engine/assumptions';
-import { STATUS_INFO, type Dreams, type Habits, type Profile } from '../engine/profile';
+import { STATUS_INFO, type Dreams, type Habits, type LifeStage, type Profile } from '../engine/profile';
 import { resolveDream, type PlanEffect } from '../engine/plan';
 import type { Plan } from '../engine/types';
 
@@ -45,6 +45,8 @@ export interface LifeScenario {
    * commitment into the plan (e.g. a pet), otherwise comparisons would show no difference.
    */
   neutral?: (ctx: ScenarioCtx, age: number) => PlanEffect[];
+  /** Life stages this moment fits (used by Lite to keep scenarios age-appropriate). Omitted = any. */
+  stages?: LifeStage[];
 }
 
 const mainAge = (c: ScenarioCtx) => Math.max(c.profile.age, c.profile.mainIncomeAge);
@@ -56,6 +58,7 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
   // 1 — First job and salary negotiation
   {
     id: 'first_offer',
+    stages: ['student', 'ns', 'early_career'],
     topic: 'First job',
     title: 'The offer letter',
     applies: isSalaried,
@@ -99,6 +102,7 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
   // 1b — Irregular income (gig / self-employed)
   {
     id: 'slow_month',
+    stages: ['student', 'early_career', 'established'],
     topic: 'Irregular income',
     title: 'The quiet months',
     applies: (c) => !isSalaried(c),
@@ -133,6 +137,7 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
   // 2 — Moving out
   {
     id: 'move_out',
+    stages: ['early_career', 'established'],
     topic: 'Housing',
     title: 'A room comes up',
     neutral: () => [
@@ -182,6 +187,7 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
   // 3 — Travel with friends
   {
     id: 'trip',
+    stages: ['early_career', 'established'],
     topic: 'Friends & travel',
     title: 'The group chat trip',
     applies: () => true,
@@ -281,6 +287,7 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
   // 5 — Insurance pitch
   {
     id: 'insurance',
+    stages: ['early_career', 'established'],
     topic: 'Insurance',
     title: 'Coffee with an old classmate',
     applies: (c) => c.profile.age >= 20,
@@ -319,6 +326,7 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
   // 6a — Unexpected: job change (salaried)
   {
     id: 'restructure',
+    stages: ['early_career', 'established'],
     topic: 'Unexpected event',
     title: 'Restructuring',
     unexpected: true,
@@ -361,6 +369,7 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
   // 6b — Unexpected: device breaks (students, NSFs, gig)
   {
     id: 'laptop',
+    stages: ['student', 'ns', 'early_career'],
     topic: 'Unexpected event',
     title: 'The laptop that wouldn’t boot',
     unexpected: true,
@@ -400,6 +409,7 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
   // 7 — Market downturn
   {
     id: 'downturn',
+    stages: ['early_career', 'established'],
     topic: 'Investing',
     title: 'Red everywhere',
     applies: hasInvesting,
@@ -485,6 +495,7 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
   // 9 — Family needs help
   {
     id: 'family_help',
+    stages: ['early_career', 'established'],
     topic: 'Family',
     title: 'A call from home',
     applies: (c) => !!c.dreams.support_parents || c.habits.family !== undefined,
@@ -523,6 +534,7 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
   // 10 — Scam
   {
     id: 'scam',
+    stages: ['early_career', 'established'],
     topic: 'Scams',
     title: '“Guaranteed 5% a week”',
     applies: () => true,
@@ -556,6 +568,124 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
       body: 'Singapore saw 37,308 scam cases and about $913 million lost in 2025, with investment scams among the costliest — and most victims were under 65.',
       sourceIds: ['spfScams2025'],
     },
+  },
+  // ---------- Stage-matched moments (students, NS, early career) ----------
+
+  {
+    id: 'bnpl',
+    topic: 'Spending',
+    title: 'Pay later?',
+    stages: ['student', 'ns', 'early_career'],
+    applies: () => true,
+    age: (c) => c.profile.age,
+    story: () => `Your phone screen cracks — badly. A new one costs $1,200. At checkout, a banner pops up: “Pay in 3 — 0% interest!”`,
+    choices: [
+      {
+        id: 'bnpl',
+        label: 'Split it into 3 with buy-now-pay-later',
+        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'bnpl', label: 'New phone (pay later)', age, amount: 1200, source: 'bnpl' } }],
+        outcome: () => 'Three payments of $400. No interest — as long as every payment is on time.',
+        reflection: 'Pay-later makes things feel cheaper than they are. One plan is manageable; several at once are easy to lose track of, and missed payments cost extra.',
+      },
+      {
+        id: 'card',
+        label: 'Put it on a credit card and pay the minimum',
+        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'bnpl', label: 'New phone + card interest (illustrative)', age, amount: 1360, source: 'bnpl' } }],
+        outcome: () => 'You pay it off slowly over a year. At about 27% a year on the unpaid balance, the phone ends up costing around $1,360 (illustrative).',
+        reflection: 'Paying only the minimum means interest on everything else — and card interest is among the most expensive borrowing there is.',
+      },
+      {
+        id: 'repair',
+        label: 'Repair the screen instead (~$250)',
+        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'bnpl', label: 'Screen repair', age, amount: 250, source: 'bnpl' } }],
+        outcome: () => 'The repair costs about $250 and the phone works fine.',
+        reflection: '“Do I need new, or do I need working?” is one of the most useful money questions there is.',
+      },
+      {
+        id: 'save',
+        label: 'Live with the crack and save up first',
+        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'bnpl', label: 'New phone (saved up)', age, amount: 1200, source: 'bnpl' } }],
+        outcome: () => 'A few months of saving later, you buy it outright. Same phone, no debt, no risk of fees.',
+        reflection: 'Saving first costs the same — but you’re never one missed payment away from extra fees.',
+      },
+    ],
+    learn: {
+      title: 'Credit and buy-now-pay-later',
+      body: 'Credit cards in Singapore typically charge about 26–28% a year on unpaid balances. Pay-later providers follow an industry code of conduct developed under MAS guidance that caps fees — but late payments can still cost you.',
+      sourceIds: ['creditCards', 'masBnpl'],
+    },
+  },
+
+  {
+    id: 'job_scam',
+    topic: 'Scams',
+    title: '“Earn $300 a day from home”',
+    stages: ['student', 'ns', 'early_career'],
+    applies: () => true,
+    age: (c) => c.profile.age,
+    story: () => `A friendly message lands in your Telegram: “Earn $300 a day liking videos! Just a small $200 deposit to unlock your first tasks.” Screenshots show other people’s payouts.`,
+    choices: [
+      { id: 'report', label: 'Block and report it', effects: () => [], outcome: () => 'You block, report and move on. Nothing lost.', reflection: 'Real jobs don’t ask you to pay to start. A “deposit to unlock tasks” is a classic job-scam pattern.' },
+      {
+        id: 'try',
+        label: 'Pay the $200 deposit “just to see”',
+        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'job_scam', label: 'Lost to a job scam', age, amount: 200, source: 'job_scam' } }],
+        outcome: () => 'You “earn” a little at first. Then you’re asked for a bigger deposit to withdraw. The $200 is gone.',
+        reflection: 'Job scams often pay small amounts first to build trust — the losses come next.',
+      },
+      { id: 'ask', label: 'Ask a friend or check ScamShield first', effects: () => [], outcome: () => 'It matches a known scam pattern. You report it together.', reflection: 'A 30-second check is the cheapest protection you’ll ever buy.' },
+    ],
+    learn: { title: 'Job scams target young people', body: 'Job scams were among the top five scam types by number of cases in Singapore in 2025, and among the costliest. Most scam victims were under 65.', sourceIds: ['spfScams2025'] },
+  },
+
+  {
+    id: 'grad_trip',
+    topic: 'Friends & travel',
+    title: 'The big trip',
+    stages: ['student', 'ns'],
+    applies: () => true,
+    age: (c) => c.profile.age,
+    story: (c) => `${c.profile.status === 'nsf' ? 'Your section is planning a post-ORD trip' : 'Your friends are planning a grad trip'}. The group chat is split: a budget week in Bangkok (~$700) or Japan (~$2,500). What’s your call?`,
+    choices: [
+      { id: 'budget', label: 'Bangkok, budget style (~$700)', effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'grad_trip', label: 'Budget trip', age, amount: 700, source: 'grad_trip' } }], outcome: () => 'Hostels, street food, great memories — about $700 all in.', reflection: 'The best trips aren’t always the most expensive ones. Cheaper trips mean you can go more often.' },
+      { id: 'japan_card', label: 'Japan with everyone — on a card, sort it later', effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'grad_trip', label: 'Japan trip + card interest (illustrative)', age, amount: 2800, source: 'grad_trip' } }], outcome: () => 'Amazing trip. Paying it off slowly adds roughly $300 in interest (illustrative).', reflection: 'Borrowing for experiences means paying for them twice — once in money, once in interest.' },
+      { id: 'japan_save', label: 'Japan — but save up for it first', effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'grad_trip', label: 'Japan trip (saved up)', age, amount: 2500, source: 'grad_trip' } }], outcome: () => 'You set a target, pick up extra hours, and pay upfront. Same trip, no debt.', reflection: 'A clear target with a date makes saving feel like progress, not sacrifice.' },
+      { id: 'skip', label: 'Skip it — staycation instead (~$150)', effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'grad_trip', label: 'Staycation', age, amount: 150, source: 'grad_trip' } }], outcome: () => 'A fun weekend at home for about $150, and your savings stay intact.', reflection: 'Saying no to one plan is saying yes to something else you care about.' },
+    ],
+    learn: { title: 'Plan big spends as a “sinking fund”', body: 'Split a big cost into small monthly amounts before it happens. In NYC’s 2026 youth dialogue, panellists encouraged youths not to measure themselves against curated highlights on social media.', sourceIds: ['nydFinLit2026'] },
+  },
+
+  {
+    id: 'late_client',
+    topic: 'Unexpected event',
+    title: 'The client goes quiet',
+    unexpected: true,
+    stages: ['student', 'early_career', 'established'],
+    applies: (c) => (c.profile.otherIncome ?? []).some((o) => o.id === 'freelance' && o.monthly > 0) || c.profile.status === 'part_time_gig' || c.profile.status === 'self_employed',
+    age: (c) => c.profile.age,
+    story: () => `A client cancels an $800 project halfway — and stops replying about paying for the work you already did.`,
+    choices: [
+      { id: 'absorb', label: 'Let it go and absorb the loss', effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'late_client', label: 'Unpaid freelance work', age, amount: 800, source: 'late_client' } }], outcome: () => 'You lose the $800 you were counting on.', reflection: 'With freelance work, income isn’t income until it’s in your account. A buffer stops one client from wrecking your month.' },
+      { id: 'chase', label: 'Follow up politely, with your messages as proof', effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'late_client', label: 'Partly unpaid freelance work', age, amount: 400, source: 'late_client' } }], outcome: () => 'After a few weeks they pay half — $400.', reflection: 'Written scope, a deposit upfront and clear payment terms protect you before work starts.' },
+      { id: 'refill', label: 'Find replacement gigs fast', effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'late_client', label: 'Income gap, partly refilled', age, amount: 300, source: 'late_client' } }], outcome: () => 'You fill most of the gap with smaller gigs — about $300 short in the end.', reflection: 'More than one client means no single one can sink you.' },
+    ],
+    learn: { title: 'Irregular income needs a bigger cushion', body: 'MoneySense suggests around 12 months of expenses as an emergency fund when income is irregular, compared with 3–6 months for steady income.', sourceIds: ['moneysenseEF'] },
+  },
+
+  {
+    id: 'internship',
+    topic: 'Work & study',
+    title: 'The internship offer',
+    stages: ['student'],
+    applies: () => true,
+    age: (c) => c.profile.age,
+    story: () => `You’re offered a 3-month paid internship at $1,200 a month. It clashes with your current gigs — and exams are coming.`,
+    choices: [
+      { id: 'take', label: 'Take the internship', effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'internship', label: 'Internship pay (after CPF, illustrative)', age, amount: -2880, source: 'internship' } }], outcome: () => 'About $2,880 take-home over 3 months — after 20% goes to your CPF. Your employer adds 17% more to CPF too.', reflection: 'Paid work experience can lift your first full-time salary — and your first CPF contributions start building.' },
+      { id: 'gigs', label: 'Keep my current gigs', effects: () => [], outcome: () => 'Your income stays the same, and you keep flexible hours.', reflection: 'Flexibility has value too. The trade-off is experience that could pay off later.' },
+      { id: 'study', label: 'Pause work and focus on exams', effects: (c, age) => { const f = (c.profile.otherIncome ?? []).find((o) => o.id === 'freelance')?.monthly ?? 0; return f > 0 ? [{ kind: 'oneOff', item: { id: 'internship', label: 'Paused freelance work', age, amount: f * 2, source: 'internship' } }] : []; }, outcome: () => 'You earn less for a couple of months, but your grades get your full attention.', reflection: 'Your studies are an investment too. Planning for a lower-income stretch is what a buffer is for.' },
+    ],
+    learn: { title: 'Your first CPF', body: 'Once you earn over $750 a month as an employee (aged 55 or below), 20% of your pay goes to your CPF and your employer adds 17% on top — even for internships.', sourceIds: ['cpfConRate'] },
   },
 ];
 

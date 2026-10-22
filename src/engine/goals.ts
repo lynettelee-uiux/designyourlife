@@ -288,7 +288,7 @@ export function goalDistance(id: AspirationId, status: GoalStatus, plan: Plan, p
     const comfy = 0.1 * Math.max(0, snap.takeHome);
     const margin = comfy > 0 ? clamp01(snap.surplus / comfy) : 0;
     const progress = status === 'on_track' ? 1 : status === 'adjust' ? 0.7 + 0.25 * margin : 0.6 * margin;
-    if (status === 'on_track') return { progress };
+    if (status === 'on_track') return { progress, why: `At ${age}, you’d still have about ${money(snap.surplus)} a month left after costs — including this one.` };
     const free = Math.max(0, comfy - snap.surplus);
     const others = Object.keys(dreams).length > 1 ? ' (including your other dreams)' : '';
     if (free < 10) {

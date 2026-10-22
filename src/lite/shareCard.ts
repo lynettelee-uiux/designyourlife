@@ -8,7 +8,7 @@ export interface CardData {
   headline: string;
   quote: string;
   strength: string;
-  dreams: { title: string; label: string; status: GoalStatus; progress: number }[];
+  dreams: { title: string; emoji: string; label: string; status: GoalStatus; progress: number }[];
   skill: string;
   url: string;
 }
@@ -93,56 +93,70 @@ export async function drawCard(data: CardData): Promise<Blob> {
     y += 76;
   }
 
-  // Personal quote
-  ctx.fillStyle = '#FFDCEC';
-  ctx.font = `italic 500 36px ${FONT}`;
-  y += 4;
-  for (const line of wrap(ctx, `“${data.quote}”`, W - pad * 2).slice(0, 2)) {
-    ctx.fillText(line, pad, y);
-    y += 50;
-  }
-
-  // Dreams
-  y += 50;
-  for (const d of data.dreams.slice(0, 3)) {
-    ctx.font = `700 40px ${FONT}`;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(d.title, pad, y);
+  // Dream tiles: emoji inside a progress ring, title and status underneath
+  y += 40;
+  const tiles = data.dreams.slice(0, 3);
+  const colW2 = (W - pad * 2) / Math.max(1, tiles.length);
+  const r = 92;
+  tiles.forEach((d, k) => {
+    const cx = pad + colW2 * k + colW2 / 2;
+    const cy = y + r;
     const pill = PILL[d.status];
-    ctx.font = `700 26px ${FONT}`;
-    const tw = ctx.measureText(d.label).width + 40;
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = pill.bar;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.04, Math.min(1, d.progress)));
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.font = `84px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(d.emoji, cx, cy + 4);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `700 32px ${FONT}`;
+    wrap(ctx, d.title, colW2 - 24).slice(0, 2).forEach((line, li) => ctx.fillText(line, cx, cy + r + 58 + li * 38));
+    ctx.font = `700 24px ${FONT}`;
+    const tw = ctx.measureText(d.label).width + 32;
     ctx.fillStyle = pill.bg;
     ctx.beginPath();
-    ctx.roundRect(W - pad - tw, y - 36, tw, 48, 24);
+    ctx.roundRect(cx - tw / 2, cy + r + 112, tw, 42, 21);
     ctx.fill();
     ctx.fillStyle = pill.fg;
-    ctx.fillText(d.label, W - pad - tw + 20, y - 3);
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
-    ctx.beginPath();
-    ctx.roundRect(pad, y + 24, W - pad * 2, 12, 6);
-    ctx.fill();
-    ctx.fillStyle = pill.bar;
-    ctx.beginPath();
-    ctx.roundRect(pad, y + 24, Math.max(24, (W - pad * 2) * Math.min(1, d.progress)), 12, 6);
-    ctx.fill();
-    y += 104;
+    ctx.fillText(d.label, cx, cy + r + 141);
+    ctx.textAlign = 'left';
+  });
+  y += r * 2 + 222;
+
+  // Personal quote
+  ctx.fillStyle = '#FFDCEC';
+  ctx.font = `italic 500 34px ${FONT}`;
+  for (const line of wrap(ctx, `“${data.quote}”`, W - pad * 2).slice(0, 2)) {
+    ctx.fillText(line, pad, y);
+    y += 46;
   }
+  y += 20;
 
   // Strength + working on
-  const boxY = Math.max(y, H - 420);
+  const boxY = Math.min(Math.max(y, H - 400), H - 340);
   const colW = (W - pad * 2 - 24) / 2;
   const box = (x: number, label: string, text: string) => {
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
     ctx.beginPath();
-    ctx.roundRect(x, boxY, colW, 210, 32);
+    ctx.roundRect(x, boxY, colW, 176, 32);
     ctx.fill();
     ctx.fillStyle = '#FF8CC2';
     ctx.font = `700 24px ${FONT}`;
-    ctx.fillText(label, x + 32, boxY + 56);
+    ctx.fillText(label, x + 32, boxY + 52);
     ctx.fillStyle = '#FFFFFF';
     ctx.font = `700 34px ${FONT}`;
-    let ty = boxY + 106;
-    for (const line of wrap(ctx, text, colW - 64).slice(0, 3)) {
+    let ty = boxY + 98;
+    for (const line of wrap(ctx, text, colW - 64).slice(0, 2)) {
       ctx.fillText(line, x + 32, ty);
       ty += 44;
     }
@@ -153,13 +167,13 @@ export async function drawCard(data: CardData): Promise<Blob> {
   // Footer
   ctx.fillStyle = '#FFFFFF';
   ctx.font = `700 34px ${FONT}`;
-  ctx.fillText('Try 3 versions of your future →', pad, H - 150);
+  ctx.fillText('What would yours look like? →', pad, H - 112);
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.font = `600 28px ${FONT}`;
-  ctx.fillText(data.url.replace(/^https?:\/\//, '').replace(/\/$/, ''), pad, H - 106);
+  ctx.fillText(data.url.replace(/^https?:\/\//, '').replace(/\/$/, ''), pad, H - 70);
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
   ctx.font = `500 22px ${FONT}`;
-  ctx.fillText('Illustrative only — not financial advice. No amounts shown.', pad, H - 64);
+  ctx.fillText('Illustrative only — not financial advice. No amounts shown.', pad, H - 34);
 
   return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not create image'))), 'image/png'));
 }

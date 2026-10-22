@@ -7,12 +7,13 @@ import { paycheck } from '../engine/paycheck';
 import { STATUS_INFO, type AspirationId, type Dreams, type LifeStatus, type Living } from '../engine/profile';
 import { monthlySnapshot } from '../engine/projection';
 import type { GoalResult } from '../engine/goals';
-import { LITE_DREAMS, MAX_DREAMS, dreamAlreadyMet, liteSimulate, momentImpact, type LiteInput, type LiteResult } from './liteSim';
+import { LITE_DREAMS, MAX_DREAMS, dreamAlreadyMet, emptyInput, liteSimulate, momentImpact, type LiteInput, type LiteResult } from './liteSim';
+import { GIVING_BANDS, HABIT_QS, INCOME_SOURCES, SAVINGS_BANDS, SOURCES_FOR, WORK_START, lifestyleFrom, type IncomeSource, type LiteHabits } from './inputs';
 import { pickSkills, type SkillPick } from './literacy';
 import { futureQuote, strengths } from './story';
 import { downloadCard, shareCard, shareText, type CardData } from './shareCard';
 
-const STEPS = ['You', 'Dreams', 'Life happens', 'Results'];
+const STEPS = ['You', 'Your money', 'Habits', 'Dreams', 'Life happens', 'Results'];
 
 const SITUATIONS: { value: LifeStatus; label: string; icon: string }[] = [
   { value: 'uni_student', label: 'Studying at uni', icon: 'GraduationCap' },
@@ -26,8 +27,8 @@ const SITUATIONS: { value: LifeStatus; label: string; icon: string }[] = [
 
 export default function LiteApp() {
   const [step, setStep] = useState(0);
-  const [input, setInput] = useState<LiteInput>({ age: 22, status: 'employed', living: 'family', dreams: {}, decisions: {}, overrides: {} });
-  const [moment, setMoment] = useState(0);
+  const [sub, setSub] = useState(0); // question index within Habits, moment index within Life happens
+  const [input, setInput] = useState<LiteInput>(emptyInput);
   const set = (patch: Partial<LiteInput>) => setInput((i) => ({ ...i, ...patch }));
   const result = useMemo(() => liteSimulate(input), [input]);
   const first = useRef(true);
@@ -41,20 +42,34 @@ export default function LiteApp() {
     const h = document.querySelector<HTMLElement>('main h1');
     h?.setAttribute('tabindex', '-1');
     h?.focus({ preventScroll: true });
-  }, [step, moment]);
+  }, [step, sub]);
 
-  const picked = Object.keys(input.dreams).length;
-  const chapter = result.chapters[Math.min(moment, result.chapters.length - 1)];
-  const lastMoment = moment >= result.chapters.length - 1;
-  const canNext = step === 1 ? result.goals.length > 0 : step === 2 ? !chapter || !!input.decisions[chapter.scenario.id] : true;
-  const next = () => {
-    if (step === 2 && !lastMoment) setMoment(moment + 1);
-    else {
-      if (step === 1) setMoment(0);
-      setStep(step + 1);
-    }
+  const go = (s: number, at = 0) => {
+    setSub(at);
+    setStep(s);
   };
-  const back = () => (step === 2 && moment > 0 ? setMoment(moment - 1) : setStep(step - 1));
+  const moments = result.chapters.length;
+  const chapter = result.chapters[Math.min(sub, moments - 1)];
+  const picked = Object.keys(input.dreams).length;
+  const incomeReady = Object.values(input.income).every((b) => b !== undefined);
+  const canNext = step === 1 ? incomeReady : step === 3 ? result.goals.length > 0 : step === 4 ? !chapter || !!input.decisions[chapter.scenario.id] : true;
+
+  const next = () => {
+    if (step === 2 && sub < HABIT_QS.length - 1) return setSub(sub + 1);
+    if (step === 4 && sub < moments - 1) return setSub(sub + 1);
+    go(step + 1);
+  };
+  const back = () => {
+    if ((step === 2 || step === 4) && sub > 0) return setSub(sub - 1);
+    if (step === 3) return go(2, HABIT_QS.length - 1);
+    if (step === 5) return go(4, moments - 1);
+    go(step - 1);
+  };
+  const label =
+    step === 1 ? (incomeReady ? 'Next' : 'Pick a range for each') :
+    step === 2 ? 'Skip' :
+    step === 3 ? (picked ? 'Let life happen' : 'Pick a dream') :
+    step === 4 ? (!canNext ? 'Make a choice' : sub < moments - 1 ? 'Next moment' : 'See my results') : 'Next';
 
   return (
     <>
@@ -91,18 +106,20 @@ export default function LiteApp() {
 
       <main id="main" className="mx-auto w-full max-w-xl px-4 pb-28 pt-4">
         {step === 0 && <StepYou input={input} set={set} />}
-        {step === 1 && <StepDreams input={input} set={set} result={result} picked={picked} />}
-        {step === 2 && <StepMoment input={input} set={set} result={result} index={moment} />}
-        {step === 3 && <StepResults input={input} set={set} result={result} onRestart={() => { setInput({ age: 22, status: 'employed', living: 'family', dreams: {}, decisions: {}, overrides: {} }); setMoment(0); setStep(0); }} />}
+        {step === 1 && <StepMoney input={input} set={set} />}
+        {step === 2 && <StepHabit input={input} set={set} index={sub} onAnswer={next} />}
+        {step === 3 && <StepDreams input={input} set={set} result={result} picked={picked} />}
+        {step === 4 && <StepMoment input={input} set={set} result={result} index={sub} />}
+        {step === 5 && <StepResults input={input} set={set} result={result} onRestart={() => { setInput(emptyInput()); go(0); }} />}
       </main>
 
-      {step < 3 && (
+      {step < 5 && (
         <ActionBar>
           <Button variant="ghost" icon="ArrowLeft" disabled={step === 0} onClick={back}>
             Back
           </Button>
-          <Button iconRight="ArrowRight" disabled={!canNext} onClick={next}>
-            {step === 0 ? 'Next' : step === 1 ? (canNext ? 'Let life happen' : 'Pick a dream') : !canNext ? 'Make a choice' : lastMoment ? 'See my results' : 'Next moment'}
+          <Button variant={step === 2 ? 'secondary' : 'primary'} iconRight={step === 2 ? undefined : 'ArrowRight'} disabled={!canNext} onClick={next}>
+            {label}
           </Button>
         </ActionBar>
       )}
@@ -126,10 +143,10 @@ function StepYou({ input, set }: StepProps) {
   return (
     <>
       <Intro eyebrow="Your future in 3 minutes" title="How close are your dreams?">
-        Pick a few dreams, make three real-life money decisions, and get a Future Card to share — plus the money skills that would bring you closer.
+        Tell us a little about your money, pick a few dreams, make three real-life decisions — and get a Future Card plus the money skills that would bring you closer.
       </Intro>
       <ul className="rise-2 -mt-1 mb-4 flex flex-wrap gap-2 text-xs font-semibold text-ink-soft" aria-label="About this">
-        {['3 minutes', 'No sign-up', 'Nothing saved', 'No amounts shared'].map((t) => (
+        {['About 4 minutes', 'Ranges, not exact numbers', 'No sign-up', 'Nothing saved'].map((t) => (
           <li key={t} className="rounded-full bg-white px-3 py-1 shadow-card">{t}</li>
         ))}
       </ul>
@@ -143,7 +160,7 @@ function StepYou({ input, set }: StepProps) {
                 key={s.value}
                 type="button"
                 aria-pressed={input.status === s.value}
-                onClick={() => set({ status: s.value, decisions: {} })}
+                onClick={() => set({ status: s.value, decisions: {}, income: Object.fromEntries(SOURCES_FOR[s.value].preset.map((src) => [src, undefined])), workStartYears: undefined })}
                 className={cx('flex min-h-[56px] items-center gap-2 rounded-2xl border px-3 text-left text-sm font-semibold', input.status === s.value ? 'border-navy-800 bg-navy-50' : 'border-mist-300 bg-white')}
               >
                 <Icon name={s.icon} className="h-4 w-4 shrink-0 text-ink-soft" />
@@ -166,7 +183,113 @@ function StepYou({ input, set }: StepProps) {
           />
         </div>
       </Card>
-      <p className="mt-4 text-center text-xs text-ink-mute">We fill in typical income and costs for your situation. Want to use your own numbers? Try the full version.</p>
+      {['uni_student', 'poly_student', 'nsf', 'between_jobs'].includes(input.status) && (
+        <Card className="mt-3">
+          <p className="mb-2 text-sm font-medium text-ink-soft">{input.status === 'between_jobs' ? 'I expect to start a full-time job in…' : input.status === 'nsf' ? 'I expect to start full-time work (after ORD and any studies) in…' : 'I expect to start full-time work in…'}</p>
+          <Chips value={input.workStartYears ?? 2} options={WORK_START.map((w) => ({ value: w.years, label: w.label }))} onChange={(v) => set({ workStartYears: Number(v) })} label="When full-time work starts" />
+        </Card>
+      )}
+      <p className="mt-4 text-center text-xs text-ink-mute">Next: a few one-tap ranges about your money — no exact numbers needed.</p>
+    </>
+  );
+}
+
+function Chips<T extends string | number>({ value, options, onChange, label }: { value: T | undefined; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
+      {options.map((o) => (
+        <button
+          key={String(o.value)}
+          type="button"
+          role="radio"
+          aria-checked={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={cx('min-h-[40px] rounded-full border px-3.5 text-sm font-semibold transition-colors', value === o.value ? 'border-navy-800 bg-navy-800 text-white' : 'border-mist-300 bg-white hover:border-ink-soft')}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function StepMoney({ input, set }: StepProps) {
+  const opts = SOURCES_FOR[input.status].options;
+  const toggle = (src: IncomeSource) => {
+    const next = { ...input.income };
+    if (src in next) delete next[src];
+    else next[src] = undefined;
+    set({ income: next });
+  };
+  const selected = opts.filter((o) => o in input.income);
+  return (
+    <>
+      <Intro eyebrow="Your money" title="Where does your money come from?">
+        Pick all that apply, then a rough range for each. Ranges are enough — no exact numbers.
+      </Intro>
+      <Card className="rise-2 space-y-5">
+        <div className="grid grid-cols-2 gap-2" role="group" aria-label="Income sources">
+          {opts.map((src) => {
+            const on = src in input.income;
+            return (
+              <button key={src} type="button" aria-pressed={on} onClick={() => toggle(src)} className={cx('flex min-h-[52px] items-center gap-2 rounded-2xl border px-3 text-left text-sm font-semibold', on ? 'border-navy-800 bg-navy-50' : 'border-mist-300 bg-white')}>
+                <Icon name={INCOME_SOURCES[src].icon} className="h-4 w-4 shrink-0 text-ink-soft" />
+                {INCOME_SOURCES[src].label}
+              </button>
+            );
+          })}
+        </div>
+        {selected.length === 0 && <p className="text-sm text-ink-mute">No income right now? That’s fine — just continue.</p>}
+        {selected.map((src) => (
+          <div key={src}>
+            <p className="mb-2 text-sm font-medium text-ink-soft">{INCOME_SOURCES[src].label} — about how much a month?</p>
+            <Chips value={input.income[src]} options={INCOME_SOURCES[src].bands.map((b, i) => ({ value: i, label: b.label }))} onChange={(v) => set({ income: { ...input.income, [src]: v } })} label={`${INCOME_SOURCES[src].label} per month`} />
+          </div>
+        ))}
+      </Card>
+      <Card className="mt-3 space-y-5">
+        <div>
+          <p className="mb-2 text-sm font-medium text-ink-soft">Savings you have right now (not CPF)</p>
+          <Chips value={input.savings} options={SAVINGS_BANDS.map((b, i) => ({ value: i, label: b.label }))} onChange={(v) => set({ savings: v })} label="Savings" />
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-medium text-ink-soft">Money you give your family each month</p>
+          <Chips value={input.giving} options={GIVING_BANDS.map((b, i) => ({ value: i, label: b.label }))} onChange={(v) => set({ giving: v })} label="Money given to family" />
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function StepHabit({ input, set, index, onAnswer }: StepProps & { index: number; onAnswer: () => void }) {
+  const q = HABIT_QS[index];
+  const current = input.habits[q.id];
+  return (
+    <>
+      <Intro eyebrow={`Money habits · ${index + 1} of ${HABIT_QS.length}`} title={q.prompt} />
+      <div className="-mt-2 mb-4 flex gap-1" aria-hidden>
+        {HABIT_QS.map((h, i) => (
+          <span key={h.id} className={cx('h-1 flex-1 rounded-full', i <= index ? 'bg-magenta-500' : 'bg-mist-200')} />
+        ))}
+      </div>
+      <div className="rise-2 space-y-2.5" role="group" aria-label="Your answer" key={q.id}>
+        {q.options.map((o) => (
+          <button
+            key={String(o.value)}
+            type="button"
+            aria-pressed={current === o.value}
+            onClick={() => {
+              set({ habits: { ...input.habits, [q.id]: o.value } as LiteHabits });
+              setTimeout(onAnswer, 180);
+            }}
+            className={cx('flex min-h-[60px] w-full items-center justify-between gap-3 rounded-3xl border bg-white px-5 py-4 text-left text-[16px] font-semibold transition-colors', current === o.value ? 'border-navy-800 bg-navy-50' : 'border-mist-200 hover:border-ink-soft')}
+          >
+            {o.label}
+            <Icon name="ArrowRight" className="h-4 w-4 shrink-0 text-ink-mute" />
+          </button>
+        ))}
+      </div>
+      <p className="mt-5 text-center text-sm text-ink-mute">No judgement — this just helps us show you what’s realistic.</p>
     </>
   );
 }
@@ -263,8 +386,8 @@ function GoalRow({ g }: { g: GoalResult }) {
       </div>
       <DistanceBar status={g.status} progress={g.progress} onDark label={`${a.title}: distance`} />
       <p className="mt-1.5 text-[13px] leading-snug text-navy-100">
-        <span className="font-semibold text-white">{g.status === 'on_track' ? 'Good news: ' : 'Why: '}</span>
-        {g.status === 'on_track' ? g.headline : g.why ?? g.headline}
+        <span className="font-semibold text-white">{g.status === 'on_track' ? 'Why it’s within reach: ' : 'Why: '}</span>
+        {g.why ?? g.headline}
       </p>
     </li>
   );
@@ -273,13 +396,14 @@ function GoalRow({ g }: { g: GoalResult }) {
 /** The typical figures behind the verdict, so it's never unexplained. */
 function BasedOn({ result }: { result: LiteResult }) {
   const p = result.profile;
-  const age = Math.max(p.age, p.mainIncomeAge);
-  const snap = monthlySnapshot(result.plan, age);
-  const living = { family: 'living with family', room: 'renting a room', whole_unit: 'renting', own: 'paying a home loan', other: 'your living costs' }[p.living];
+  const now = monthlySnapshot(result.plan, p.age);
+  const later = monthlySnapshot(result.plan, Math.max(p.age, p.mainIncomeAge));
+  const working = p.mainIncomeAge <= p.age;
   return (
     <p className="mt-4 rounded-2xl bg-white/10 p-3 text-xs leading-relaxed text-navy-100">
-      <span className="font-semibold text-white">Based on typical figures for you{age > p.age ? ` from age ${age}` : ''}: </span>
-      about {money(snap.takeHome)} take-home a month (on {money(p.mainIncome)} pay, after CPF and tax), {living}, and about {money(snap.spend)} of monthly costs including your dreams — leaving {money(snap.surplus)}. Want to use your own numbers? Try the full version.
+      <span className="font-semibold text-white">Based on what you told us: </span>
+      about {money(now.takeHome)} coming in a month and {money(now.spend)} going out (including {money(p.lifestyle)} on food, fun and shopping), leaving {money(now.surplus)}.
+      {!working && <> From {p.mainIncomeAge}, we assume a typical starting salary of about {money(p.mainIncome)} (take-home ~{money(later.takeHome)}).</>} Want to use exact numbers? Try the full version.
     </p>
   );
 }
@@ -352,15 +476,17 @@ function StepResults({ input, set, result, onRestart }: StepProps & { result: Li
     [input, result],
   );
 
-  const skills = pickSkills({ goals: result.goals, status: p.status, moments, invested: investNow > 0, dreamTitle: title });
-  const strong = strengths({ goals: result.goals, status: p.status, living: input.living, moments, investMonthly: investNow, dreamTitle: title });
+  const nowSnap = monthlySnapshot(result.plan, p.age);
+  const takeHome = nowSnap.takeHome;
+  const skills = pickSkills({ goals: result.goals, status: p.status, moments, habits: input.habits, monthlyLeftover: nowSnap.surplus, lifestyleShare: takeHome > 0 ? lifestyleFrom(input.habits) / takeHome : undefined, invested: investNow > 0, dreamTitle: title });
+  const strong = strengths({ goals: result.goals, status: p.status, living: input.living, moments, habits: input.habits, investMonthly: investNow, dreamTitle: title });
   const near = result.goals.filter((g) => g.status === 'on_track').length;
   const card: CardData = {
     headline: verdictHeadline(near, result.goals.length),
     quote: futureQuote(result.goals),
-    strength: strong[0],
+    strength: strong.find((t) => !t.includes('within reach')) ?? strong[0],
     skill: skills[0].skill.short,
-    dreams: result.goals.map((g) => ({ title: title(g.id), label: DISTANCE[g.status].label, status: g.status, progress: g.progress })),
+    dreams: result.goals.map((g) => ({ title: title(g.id), emoji: dreamEmoji(g.id, result.ctx.dreams.pet?.variant), label: DISTANCE[g.status].label, status: g.status, progress: g.progress })),
     url: new URL('./', window.location.href).href,
   };
 
@@ -388,7 +514,7 @@ function StepResults({ input, set, result, onRestart }: StepProps & { result: Li
 
       <section className="mt-8" aria-labelledby="skills-h">
         <h2 id="skills-h" className="display text-xl">What to work on</h2>
-        <p className="mt-1 text-sm text-ink-mute">Your gaps point to three money skills. Each takes a minute to start.</p>
+        <p className="mt-1 text-sm text-ink-mute">Based on your money habits and choices — three skills that would bring your dreams closer.</p>
         <ol className="mt-3 space-y-3">
           {skills.map((s, i) => (
             <SkillCard key={s.skill.id} pick={s} n={i + 1} />
@@ -464,9 +590,13 @@ function verdictHeadline(near: number, total: number) {
   return `${near} of my ${total} dreams ${near === 1 ? 'looks' : 'look'} within reach`;
 }
 
-const CARD_BAR: Record<GoalResult['status'], string> = { on_track: 'bg-[#5BD19A]', adjust: 'bg-[#F2B54B]', explore: 'bg-[#FF8CC2]' };
+const RING: Record<GoalResult['status'], string> = { on_track: '#5BD19A', adjust: '#F2B54B', explore: '#FF8CC2' };
 
-/** On-screen version of the share image. Bars grow in once on reveal (instant with reduced motion). */
+export function dreamEmoji(id: AspirationId, variant?: string): string {
+  return ({ travel: '✈️', live_independently: '🔑', pet: variant === 'cat' ? '🐱' : '🐶', career_break: '🌴', own_home: '🏠', retire_early: '🌅' } as Record<string, string>)[id] ?? '✨';
+}
+
+/** On-screen version of the share image. Rings fill once on reveal (instant with reduced motion). */
 function FutureCard({ data }: { data: CardData }) {
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -486,21 +616,30 @@ function FutureCard({ data }: { data: CardData }) {
         </div>
         <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.14em] text-magenta-300">My Future Card</p>
         <p className="display mt-1 text-[26px] leading-tight text-white">{data.headline}</p>
-        <blockquote className="mt-2 text-[15px] italic leading-snug text-magenta-100">“{data.quote}”</blockquote>
-        <ul className="mt-5 space-y-3">
+        <ul className={cx('mt-5 grid gap-3', data.dreams.length === 1 ? 'grid-cols-1' : data.dreams.length === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
           {data.dreams.map((d, i) => (
-            <li key={d.title}>
-              <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">
-                <span className="font-semibold">{d.title}</span>
-                <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold">{d.label}</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-white/15" role="meter" aria-label={`${d.title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(d.progress * 100)} aria-valuetext={d.label}>
-                <div className={cx('h-full rounded-full transition-[width] duration-1000 ease-out', CARD_BAR[d.status])} style={{ width: shown ? `${Math.max(4, Math.min(1, d.progress) * 100)}%` : '0%', transitionDelay: `${i * 150}ms` }} />
-              </div>
+            <li key={d.title} className="flex flex-col items-center text-center" style={{ animationDelay: `${i * 120}ms` }}>
+              <span
+                className="ring-fill grid h-[76px] w-[76px] place-items-center rounded-full"
+                style={{ ['--p' as string]: shown ? Math.max(6, Math.min(1, d.progress) * 100) : 0, ['--c' as string]: RING[d.status], transitionDelay: `${i * 150}ms` }}
+                role="meter"
+                aria-label={d.title}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(d.progress * 100)}
+                aria-valuetext={d.label}
+              >
+                <span className="grid h-[62px] w-[62px] place-items-center rounded-full bg-[#251a63] text-[30px]" aria-hidden>
+                  {d.emoji}
+                </span>
+              </span>
+              <span className="mt-2 text-[13px] font-semibold leading-tight">{d.title}</span>
+              <span className="mt-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold">{d.label}</span>
             </li>
           ))}
         </ul>
-        <div className="mt-5 grid grid-cols-2 gap-2.5">
+        <blockquote className="mt-5 text-[15px] italic leading-snug text-magenta-100">“{data.quote}”</blockquote>
+        <div className="mt-4 grid grid-cols-2 gap-2.5">
           <div className="rounded-2xl bg-white/10 p-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-magenta-300">My strength</p>
             <p className="mt-1 text-[13px] font-semibold leading-snug">{data.strength}</p>
@@ -510,7 +649,8 @@ function FutureCard({ data }: { data: CardData }) {
             <p className="mt-1 text-[13px] font-semibold leading-snug">{data.skill}</p>
           </div>
         </div>
-        <p className="mt-4 text-[11px] text-white/70">Illustrative, not financial advice · no amounts shown</p>
+        <p className="mt-4 text-[12px] font-semibold text-white">What would yours look like? →</p>
+        <p className="mt-0.5 text-[11px] text-white/70">Illustrative, not financial advice · no amounts shown</p>
       </div>
     </figure>
   );
@@ -571,7 +711,14 @@ function SkillCard({ pick, n }: { pick: SkillPick; n: number }) {
           </li>
         ))}
       </ul>
-      <div className="mt-4 rounded-2xl bg-mist-50 p-3.5">
+      <p className="mt-3 flex gap-2 rounded-2xl bg-blush-100 p-3 text-sm leading-relaxed">
+        <Icon name="Lightbulb" className="mt-0.5 h-4 w-4 shrink-0 text-magenta-700" />
+        <span>
+          <strong>Try this week: </strong>
+          {s.tip}
+        </span>
+      </p>
+      <div className="mt-3 rounded-2xl bg-mist-50 p-3.5">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-mute">Quick check · true or false?</p>
         <p className="mt-1 text-[15px] font-semibold leading-snug">{s.check.statement}</p>
         <div className="mt-2.5 flex gap-2" role="group" aria-label="Your answer">

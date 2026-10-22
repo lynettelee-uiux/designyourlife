@@ -25,7 +25,7 @@ export function resolveDream(sel: DreamSelection, p: Profile): Required<Pick<Dre
   const a = p.age;
   const d: Record<AspirationId, Partial<DreamSelection>> = {
     retire_early: { age: 55, amount: 2500 },
-    travel: { count: 2, amount: COST_DEFAULTS.regionalTrip },
+    travel: { count: 2, amount: COST_DEFAULTS.regionalTrip, age: Math.max(a, p.mainIncomeAge) },
     own_home: { age: Math.max(a + 6, 28), amount: 30000 },
     live_independently: { age: Math.max(a + 2, p.mainIncomeAge + 1), amount: COST_DEFAULTS.roomRent },
     pet: { age: Math.max(a + 2, p.mainIncomeAge + 1), variant: 'dog' },
@@ -134,7 +134,7 @@ export function buildPlan(inp: PlanInputs): Plan {
         break;
       case 'travel': {
         const trips = ov.tripsPerYear ?? d.count!;
-        if (trips > 0) recurring.push({ id: 'travel', label: `${trips} trip${trips === 1 ? '' : 's'} a year`, category: 'travel', monthly: Math.round((trips * d.amount!) / 12), fromAge: Math.max(a, p.mainIncomeAge), source: 'dream' });
+        if (trips > 0) recurring.push({ id: 'travel', label: `${trips} trip${trips === 1 ? '' : 's'} a year`, category: 'travel', monthly: Math.round((trips * d.amount!) / 12), fromAge: Math.max(a, d.age!), source: 'dream' });
         break;
       }
       case 'live_independently': {
@@ -189,6 +189,7 @@ export function buildPlan(inp: PlanInputs): Plan {
     incomePhases,
     incomeAdjustments,
     incomeGaps,
+    otherIncome: (p.otherIncome ?? []).filter((o) => o.monthly > 0).map((o) => ({ ...o, fromAge: a })),
     recurring,
     oneOffs,
     cash: p.cash,

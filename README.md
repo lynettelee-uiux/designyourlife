@@ -6,7 +6,7 @@ A mobile-first, personalised financial life simulator prototype for Singapore yo
 
 **Two versions, one engine**
 - **Full** (`/`): ~8–10 minutes — 12 dreams, reality check, habit questions, a 5–7 chapter life story, outlook, Change One Thing and six tools.
-- **Lite** (`/lite/`): ~3–4 minutes, 4 steps — age/situation/living → pick up to 3 of 6 dreams with a live near/far verdict and a *why* for each → three scenario questions (one tied to a dream, one everyday money moment, one unexpected event) → a shareable **Future Card** (personal quote, strength, skill to work on — never amounts), strengths, three money skills with quick true/false checks and official links, and two "change one thing" sliders. No saving. Code in `src/lite/` (`liteSim`, `literacy`, `story`, `shareCard`).
+- **Lite** (`/lite/`): ~4 minutes, 6 short steps, all one-tap ranges — you (age, situation, when full-time work starts, living) → your money (income sources: family allowance, part-time, freelance, internship, salary, NS — each as a range; savings; money given to family) → 6 money-habit questions → up to 3 dreams with a near/far verdict, a *why* for each and the figures used → three life moments matched to life stage (e.g. students: grad trip, pay-later, freelance client) → a visual, shareable **Future Card** (no amounts), strengths, and three money skills drawn from habits and choices, each with a tip, a quick check and an official link. No saving. Code in `src/lite/`.
 
 > Educational illustration only — not a prediction and not financial advice. No accounts, no real data required, nothing leaves the browser.
 
@@ -27,7 +27,7 @@ Open http://localhost:5173 (full) or http://localhost:5173/lite/ (Lite).
 | Script | What it does |
 |---|---|
 | `npm run dev` | Dev server with hot reload |
-| `npm test` | Run 71 automated tests (CPF, tax, projections, scenarios) |
+| `npm test` | Run 79 automated tests (CPF, tax, projections, scenarios) |
 | `npm run typecheck` | TypeScript strict check |
 | `npm run build` | Type-check and build static files to `dist/` |
 | `npm run preview` | Serve the production build locally |

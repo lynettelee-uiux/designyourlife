@@ -81,6 +81,19 @@ export interface IncomeGap {
 
 export type DownturnResponse = 'sell' | 'hold' | 'keep_investing';
 
+/** Income that isn't a CPF-paying wage: family allowance (not taxable), freelance/gig work (taxable, no CPF). */
+export interface OtherIncome {
+  id: string;
+  label: string;
+  /** Today's dollars per month. */
+  monthly: number;
+  fromAge: number;
+  toAge?: number;
+  taxable: boolean;
+  /** Grows with pay (freelance) or stays flat (family allowance). */
+  grows: boolean;
+}
+
 export interface Plan {
   startAge: number;
   startYear: number;
@@ -88,6 +101,7 @@ export interface Plan {
   incomePhases: IncomePhase[];
   incomeAdjustments: IncomeAdjustment[];
   incomeGaps: IncomeGap[];
+  otherIncome?: OtherIncome[];
   recurring: RecurringItem[];
   oneOffs: OneOffItem[];
   cash: number;

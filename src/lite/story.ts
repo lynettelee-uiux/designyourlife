@@ -4,6 +4,7 @@
 
 import type { GoalResult } from '../engine/goals';
 import type { AspirationId, LifeStatus, Living } from '../engine/profile';
+import type { LiteHabits } from './inputs';
 
 const PHRASE: Record<AspirationId, string> = {
   travel: 'seeing the world',
@@ -46,11 +47,21 @@ export interface StrengthInputs {
   living: Living;
   moments: { scenario: string; choice?: string }[];
   investMonthly: number;
+  habits?: LiteHabits;
   dreamTitle: (id: AspirationId) => string;
 }
 
 const CHOICE_STRENGTH: Record<string, string> = {
   'trip:save_first': 'You save up before you spend',
+  'bnpl:repair': 'You ask “do I need new, or working?”',
+  'bnpl:save': 'You save up before big buys',
+  'job_scam:report': 'You spot red flags',
+  'job_scam:ask': 'You check before you act',
+  'grad_trip:budget': 'You get great experiences on a budget',
+  'grad_trip:japan_save': 'You set a target and save for it',
+  'late_client:chase': 'You stand up for what you’re owed',
+  'late_client:refill': 'You keep more than one income stream',
+  'internship:take': 'You invest in experience early',
   'trip:cheaper': 'You find a version that fits your budget',
   'trip:skip': 'You can say no to protect your plans',
   'scam:report': 'You spot red flags',
@@ -74,11 +85,25 @@ const CHOICE_STRENGTH: Record<string, string> = {
 export function strengths(i: StrengthInputs): string[] {
   const out: string[] = [];
   const near = i.goals.filter((g) => g.status === 'on_track');
-  if (near.length) out.push(`${near.map((g) => i.dreamTitle(g.id)).join(' and ')} ${near.length === 1 ? 'is' : 'are'} within reach`);
+  if (near.length) {
+    const names = near.map((g) => i.dreamTitle(g.id).toLowerCase());
+    out.push(
+      near.length === i.goals.length && near.length > 1
+        ? 'All your dreams are within reach'
+        : near.length === 1
+          ? `“${cap(names[0])}” is within reach`
+          : `“${cap(names[0])}” and “${names[1]}” are within reach`,
+    );
+  }
   for (const m of i.moments) {
     const s = m.choice ? CHOICE_STRENGTH[`${m.scenario}:${m.choice}`] : undefined;
     if (s && !out.includes(s)) out.push(s);
   }
+  const h = i.habits ?? {};
+  if (h.saving === 'first') out.push('You pay yourself first');
+  if (h.surprise === 'savings') out.push('You have savings for surprises');
+  if (h.tracking === 'yes') out.push('You know where your money goes');
+  if (h.bigBuy === 'save') out.push('You save up before big buys');
   if (i.living === 'family') out.push('Low housing costs give you room to save');
   if (i.investMonthly > 0) out.push('You’re starting early — time is your biggest advantage');
   if (i.status === 'employed') out.push('A steady income, with CPF building in the background');

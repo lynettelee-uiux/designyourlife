@@ -158,6 +158,41 @@ describe('owning a home with a CPF-paid loan', () => {
   });
 });
 
+describe('non-wage income (family allowance, freelance)', () => {
+  const student = () => ({
+    ...defaultProfile(23, 'uni_student'),
+    currentIncome: 0,
+    familyAllowance: 0,
+    otherIncome: [
+      { id: 'allowance', label: 'Allowance from family', monthly: 300, taxable: false, grows: false, toAge: 25 },
+      { id: 'freelance', label: 'Freelance', monthly: 800, taxable: true, grows: true },
+    ],
+  });
+  it('adds to take-home without CPF, and stops the allowance when main work starts', () => {
+    const plan = buildPlan({ profile: student(), dreams: {}, habits: {} });
+    const now = monthlySnapshot(plan, 23);
+    expect(now.employeeCpf).toBe(0);
+    expect(now.takeHome).toBeCloseTo(1100, 0);
+    const later = monthlySnapshot(plan, 25);
+    expect(later.gross).toBeGreaterThan(plan.incomePhases[1].monthly); // salary + freelance, allowance stopped
+  });
+  it('keeps money conserved with mixed income', () => {
+    const plan = buildPlan({ profile: student(), dreams: { travel: { id: 'travel', age: 23, count: 2, amount: 600 } }, habits: {} });
+    let prevCash = plan.cash;
+    let prevLiquid = plan.cash;
+    for (const r of project(plan).rows.slice(0, 8)) {
+      if (r.shortfall > 0 || r.unfunded > 0) break;
+      expect(r.liquid).toBeCloseTo(prevLiquid + r.takeHome - r.spending - r.oneOffs + r.investReturn + prevCash * SCENARIOS.baseline.cashReturn, 0);
+      prevCash = r.cash;
+      prevLiquid = r.liquid;
+    }
+  });
+  it('lets travel start while studying when the dream says so', () => {
+    const plan = buildPlan({ profile: student(), dreams: { travel: { id: 'travel', age: 23, count: 1, amount: 600 } }, habits: {} });
+    expect(plan.recurring.find((r) => r.id === 'travel')).toMatchObject({ fromAge: 23, monthly: 50 });
+  });
+});
+
 describe('scenario ordering', () => {
   it('favourable ≥ baseline ≥ challenging liquid assets at 45 for a typical saver', () => {
     const plan = buildPlan({ profile: worker(), dreams: {}, habits: { windfall: 'invest' } });

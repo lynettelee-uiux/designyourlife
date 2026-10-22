@@ -16,7 +16,7 @@ describe('future quote', () => {
 describe('strengths', () => {
   it('draws on results and choices, and always returns at least one', () => {
     const s = strengths({ goals: [g('travel', 'on_track')], status: 'employed', living: 'family', moments: [{ scenario: 'restructure', choice: 'freelance' }], investMonthly: 200, dreamTitle: () => 'Travel often' });
-    expect(s[0]).toBe('Travel often is within reach');
+    expect(s[0]).toBe('“Travel often” is within reach');
     expect(s).toContain('You’re resourceful when plans change');
     expect(s.length).toBeLessThanOrEqual(3);
     expect(strengths({ goals: [], status: 'between_jobs', living: 'room', moments: [], investMonthly: 0, dreamTitle: () => '' }).length).toBe(1);

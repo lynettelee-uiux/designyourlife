@@ -38,10 +38,15 @@ input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px #FF8
 .rise { animation: rise .35s ease-out both; }
 .rise-2 { animation: rise .35s .06s ease-out both; }
 .rise-3 { animation: rise .35s .12s ease-out both; }
+/* Progress ring for the Future Card: animates --p from 0 to the value. */
+@property --p { syntax: '<number>'; inherits: false; initial-value: 0; }
+.ring-fill { background: conic-gradient(var(--c) calc(var(--p) * 1%), rgba(255,255,255,0.15) 0); transition: --p 1.1s cubic-bezier(.2,.8,.2,1); }
+
 @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
 .pop { animation: pop .5s cubic-bezier(.2,.8,.2,1) both; }
 @media (prefers-reduced-motion: reduce) {
   .rise, .rise-2, .rise-3, .pop { animation: none; }
+  .ring-fill { transition: none; }
   * { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
 

@@ -12,6 +12,15 @@ export type LifeStatus =
   | 'self_employed'
   | 'alt_path';
 
+export type LifeStage = 'student' | 'ns' | 'early_career' | 'established';
+
+/** Life stage drives which scenarios feel relevant — a 23-year-old student and a 33-year-old face different decisions. */
+export function lifeStage(p: { status: LifeStatus; age: number }): LifeStage {
+  if (p.status === 'uni_student' || p.status === 'poly_student' || p.status === 'ite_student') return 'student';
+  if (p.status === 'nsf') return 'ns';
+  return p.age >= 28 ? 'established' : 'early_career';
+}
+
 export type Living = 'family' | 'room' | 'whole_unit' | 'own' | 'other';
 
 export interface Profile {
@@ -39,6 +48,8 @@ export interface Profile {
   homeLoanMonthly: number;
   homeLoanCpf: number;
   homeLoanYears: number;
+  /** Optional non-wage income (Lite): family allowance, freelance. `toAge` defaults to when main work starts for allowances. */
+  otherIncome?: { id: string; label: string; monthly: number; taxable: boolean; grows: boolean; toAge?: number }[];
 }
 
 export type AspirationId =

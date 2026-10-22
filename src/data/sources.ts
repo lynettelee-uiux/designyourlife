@@ -198,6 +198,23 @@ export const SOURCES: Record<string, Source> = {
     accessed: ACCESSED,
     official: true,
   },
+  creditCards: {
+    id: 'creditCards',
+    title: 'Credit card key facts sheets — effective interest ~26–28% p.a. on unpaid balances (e.g. 27.9% p.a.)',
+    publisher: 'Singapore card issuers’ published key facts (e.g. Trust Bank); summarised by secondary sources',
+    url: 'https://trustbank.sg/legal/key-facts-sheet-credit-card/',
+    accessed: ACCESSED,
+    official: false,
+  },
+  masBnpl: {
+    id: 'masBnpl',
+    title: 'Written reply to Parliamentary Question on Buy Now Pay Later advertising (BNPL Code of Conduct)',
+    publisher: 'MAS',
+    url: 'https://www.mas.gov.sg/news/parliamentary-replies/2025/written-reply-to-parliamentary-question-on-buy-now-pay-later-advertising',
+    published: '2025',
+    accessed: ACCESSED,
+    official: true,
+  },
   nycSurvey2023: {
     id: 'nycSurvey2023',
     title: 'Low confidence in meeting long-term financial goals despite high investment activity amongst youths (survey of 500 youths, 4Q2022)',

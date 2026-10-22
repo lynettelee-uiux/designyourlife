@@ -26,6 +26,21 @@ export function monthlyGrossAt(plan: Plan, age: number, s: ScenarioParams): numb
   return phase.monthly * Math.pow(1 + s.salaryGrowth, t) * factor;
 }
 
+/** Non-wage income at `age` (monthly, nominal), split by whether it's taxable. Stops at retirement. */
+export function otherIncomeAt(plan: Plan, age: number, s: ScenarioParams): { taxable: number; untaxed: number } {
+  if (age >= plan.retireAge) return { taxable: 0, untaxed: 0 };
+  const t = age - plan.startAge;
+  let taxable = 0;
+  let untaxed = 0;
+  for (const o of plan.otherIncome ?? []) {
+    if (!activeAt(age, o.fromAge, o.toAge)) continue;
+    const amt = o.monthly * (o.grows ? Math.pow(1 + s.salaryGrowth, t) : 1);
+    if (o.taxable) taxable += amt;
+    else untaxed += amt;
+  }
+  return { taxable, untaxed };
+}
+
 /** Recurring monthly spending by category at `age` (nominal). In retirement, one all-in figure replaces it. */
 export function monthlySpendAt(plan: Plan, age: number, s: ScenarioParams): { total: number; byCategory: Partial<Record<Category, number>> } {
   const t = age - plan.startAge;
@@ -62,10 +77,13 @@ export interface MonthlySnapshot {
 export function monthlySnapshot(plan: Plan, age: number, key: ScenarioKey = 'baseline'): MonthlySnapshot {
   const s = SCENARIOS[key];
   const year = plan.startYear + (age - plan.startAge);
-  const gross = monthlyGrossAt(plan, age, s);
+  const wage = monthlyGrossAt(plan, age, s);
+  const other = otherIncomeAt(plan, age, s);
+  const gross = wage + other.taxable + other.untaxed;
   const kind = incomePhaseAt(plan, age)?.kind ?? 'none';
-  const cpf = cpfApplies(plan.residency, kind) ? monthlyCpf(gross, age, year) : { employee: 0, employer: 0 };
-  const tax = gross <= 0 ? 0 : estimateAnnualTax(gross * 12, cpf.employee * 12, age, year).tax / 12;
+  const cpf = cpfApplies(plan.residency, kind) ? monthlyCpf(wage, age, year) : { employee: 0, employer: 0 };
+  const taxBase = wage + other.taxable;
+  const tax = taxBase <= 0 ? 0 : estimateAnnualTax(taxBase * 12, cpf.employee * 12, age, year).tax / 12;
   const takeHome = gross - cpf.employee - tax;
   const { total, byCategory } = monthlySpendAt(plan, age, s);
   const t = age - plan.startAge;
@@ -112,13 +130,15 @@ export function project(plan: Plan, key: ScenarioKey = 'baseline'): Projection {
     const partialIncome = gaps.reduce((sum, g) => sum + g.months * (g.partialFactor ?? 0), 0) * monthly;
     const workMonths = 12 - gapMonths;
     const regularGross = monthly * workMonths;
-    const gross = regularGross + partialIncome;
+    const other = otherIncomeAt(plan, age, s);
+    const gross = regularGross + partialIncome + (other.taxable + other.untaxed) * 12;
 
     const cpfOn = cpfApplies(plan.residency, kind) && !retired;
     const m = cpfOn ? monthlyCpf(monthly, age, year) : { employee: 0, employer: 0, total: 0 };
     const employeeCpf = m.employee * workMonths;
     const employerCpf = m.employer * workMonths;
-    const tax = gross > 0 ? estimateAnnualTax(gross, employeeCpf, age, year).tax : 0;
+    const taxBase = regularGross + partialIncome + other.taxable * 12;
+    const tax = taxBase > 0 ? estimateAnnualTax(taxBase, employeeCpf, age, year).tax : 0;
     const takeHome = gross - employeeCpf - tax;
 
     // ---- CPF (modelled below 55 only) ----
