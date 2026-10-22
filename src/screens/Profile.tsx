@@ -249,6 +249,10 @@ function Ready({ onEdit }: { onEdit: (s: number) => void }) {
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
+              <NumberField label="Allowance from family / month" prefix="$" value={otherMonthly(p, 'allowance')} onChange={(v) => set({ otherIncome: withOther(p, 'allowance', v) })} max={5000} help="Not taxed, no CPF" />
+              <NumberField label="Freelance or gigs / month" prefix="$" value={otherMonthly(p, 'freelance')} onChange={(v) => set({ otherIncome: withOther(p, 'freelance', v) })} max={20000} help="Taxed, no CPF" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <NumberField label="Cash savings" prefix="$" value={p.cash} onChange={(v) => set({ cash: v })} max={2000000} />
               <NumberField label="Investments" prefix="$" value={p.investments} onChange={(v) => set({ investments: v })} max={2000000} />
             </div>
@@ -294,4 +298,14 @@ function Ready({ onEdit }: { onEdit: (s: number) => void }) {
       </div>
     </>
   );
+}
+
+const otherMonthly = (p: Profile, id: 'allowance' | 'freelance') => p.otherIncome?.find((o) => o.id === id)?.monthly ?? 0;
+
+/** Family allowance and freelance income stop when main work starts (for those not working yet), like in Lite. */
+function withOther(p: Profile, id: 'allowance' | 'freelance', monthly: number): Profile['otherIncome'] {
+  const rest = (p.otherIncome ?? []).filter((o) => o.id !== id);
+  if (monthly <= 0) return rest;
+  const toAge = p.mainIncomeAge > p.age ? p.mainIncomeAge : undefined;
+  return [...rest, id === 'allowance' ? { id, label: 'Allowance from family', monthly, taxable: false, grows: false, toAge } : { id, label: 'Freelance or gigs', monthly, taxable: true, grows: true, toAge }];
 }

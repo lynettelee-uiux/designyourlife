@@ -9,7 +9,13 @@ import { money, months, pct } from '../engine/format';
 import { emergencyMonthsAt, emergencyTarget, type GoalResult } from '../engine/goals';
 import { balancesAtAge, incomePhaseAt, monthlySnapshot } from '../engine/projection';
 import { CATEGORY_LABEL, type Category } from '../engine/types';
-import { useSimulation } from '../state/sim';
+import { compareChoice, useSimulation } from '../state/sim';
+import { useMemo } from 'react';
+import { DISTANCE } from '../components/Distance';
+import { FutureCard, ShareBar, SkillCard, dreamEmoji, verdictHeadline } from '../components/FutureCard';
+import { pickSkills } from '../lite/literacy';
+import { futureQuote, strengths } from '../lite/story';
+import type { CardData } from '../lite/shareCard';
 import { useStore } from '../state/store';
 
 export default function Outlook() {
@@ -33,6 +39,33 @@ export default function Outlook() {
   const commitments = (Object.entries(snap.byCategory) as [Category, number][]).sort((a, b) => b[1] - a[1]);
   const counts = goals.reduce((m, g) => ({ ...m, [g.status]: (m[g.status] ?? 0) + 1 }), {} as Record<string, number>);
   const hasOverrides = Object.keys(state.overrides).length > 0;
+
+  // Same principles as Lite: skills come from habits, story choices and gaps; the card never shows amounts.
+  const moments = useMemo(
+    () =>
+      chapters
+        .filter((c) => state.decisions[c.scenario.id])
+        .map((c) => {
+          const cmp = compareChoice(state, c.scenario.id, state.decisions[c.scenario.id]);
+          return { scenario: c.scenario.id, choice: state.decisions[c.scenario.id], impact: cmp.liquidNextAfter - cmp.liquidNextBefore };
+        }),
+    [state, chapters],
+  );
+  const title = (id: GoalResult['id']) => aspirationById(id).title;
+  const nowSnap = monthlySnapshot(plan, p.age);
+  const habits = { surprise: state.habits.surprise, tracking: state.habits.tracking };
+  const skills = pickSkills({ goals, status: p.status, moments, habits, monthlyLeftover: undefined, lifestyleShare: nowSnap.takeHome > 0 ? (nowSnap.byCategory.lifestyle ?? 0) / nowSnap.takeHome : undefined, invested: plan.investMonthly > 0, dreamTitle: title });
+  const strong = strengths({ goals, status: p.status, living: p.living, moments, habits, investMonthly: plan.investMonthly, dreamTitle: title });
+  const near = goals.filter((g) => g.status === 'on_track').length;
+  const cardGoals = [...goals].sort((a, b) => b.progress - a.progress).slice(0, 3);
+  const card: CardData = {
+    headline: verdictHeadline(near, goals.length),
+    quote: futureQuote(cardGoals),
+    strength: strong.find((t) => !t.includes('within reach')) ?? strong[0],
+    skill: skills[0].skill.short,
+    dreams: cardGoals.map((g) => ({ title: title(g.id), emoji: dreamEmoji(g.id, dreams.pet?.variant), label: DISTANCE[g.status].label, status: g.status, progress: g.progress })),
+    url: new URL('./lite/', window.location.href).href,
+  };
 
   return (
     <Screen wide>
@@ -83,6 +116,42 @@ export default function Outlook() {
             <GoalCard key={g.id} g={g} />
           ))}
         </ul>
+      </section>
+
+      <section className="mt-8" aria-labelledby="skills-h">
+        <h2 id="skills-h" className="display text-2xl">
+          What to work on
+        </h2>
+        <p className="mt-1 text-sm text-ink-mute">Three money skills from your habits, choices and gaps. Tap one for a tip and a quick check.</p>
+        <ol className="mt-3 grid gap-3 sm:grid-cols-1">
+          {skills.map((s, i) => (
+            <SkillCard key={s.skill.id} pick={s} n={i + 1} />
+          ))}
+        </ol>
+        {strong.length > 0 && (
+          <div className="mt-4 rounded-2xl bg-white p-4 shadow-card">
+            <p className="text-sm font-semibold">Your strengths in this version</p>
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {strong.map((t) => (
+                <li key={t} className="inline-flex items-center gap-1.5 rounded-full bg-sage-100 px-3 py-1 text-xs font-semibold text-sage-700">
+                  <Icon name="CircleCheck" className="h-3.5 w-3.5" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      <section className="mt-8" aria-labelledby="card-h">
+        <h2 id="card-h" className="display text-2xl">
+          Your Future Card
+        </h2>
+        <p className="mb-3 mt-1 text-sm text-ink-mute">Share where this version could lead — your dreams and skills, never your numbers.</p>
+        <div className="mx-auto max-w-md">
+          <FutureCard data={card} />
+          <ShareBar data={card} />
+        </div>
       </section>
 
       <section className="mt-8 grid gap-3 sm:grid-cols-2">
@@ -224,6 +293,18 @@ export function GoalCard({ g, compact }: { g: GoalResult; compact?: boolean }) {
         </div>
       </div>
       <p className="mt-3 text-[15px] leading-snug">{g.headline}</p>
+      {g.why && (
+        <p className="mt-1.5 text-sm leading-snug text-ink-soft">
+          <strong className="text-ink">{g.status === 'on_track' ? 'Why it’s within reach: ' : 'Why: '}</strong>
+          {g.why}
+        </p>
+      )}
+      {g.gap && (
+        <p className="mt-2 rounded-2xl bg-blush-100 p-3 text-sm leading-snug">
+          <strong>Closing the gap: </strong>
+          {g.gap}
+        </p>
+      )}
       {!compact && g.detail && <p className="mt-1.5 text-sm leading-relaxed text-ink-mute">{g.detail}</p>}
       {!compact && g.numbers.length > 0 && (
         <dl className="mt-3 space-y-1 text-sm">

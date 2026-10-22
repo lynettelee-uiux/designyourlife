@@ -53,3 +53,10 @@ Journey: Dream → Reality check → Life choices → Life happens (chapters) �
 Global: header (avatar → profile; menu → How this works & sources / Edit profile / Start over), progress bar (revisit completed stages)
 About: can/can't, privacy & local-save toggle, assumptions (status, effective date, conditions, next review), sources
 ```
+
+## Shared principles (Lite and full)
+Both versions now apply the same principles; the full version stays more detailed.
+- **Believable inputs:** money received (family allowance, freelance) counts as income without CPF; students and NSFs don't give family money by default; every verdict says *why* and how to close the gap.
+- **Stage-matched moments:** scenarios are tagged by life stage (student, NS, early career, established). Dream-linked chapters follow the user's own timing.
+- **Habits → skills:** money-habit questions (e.g. surprise bill, tracking) feed three personalised money skills, each collapsed to title + why, with a tip, quick check and official link on tap.
+- **Shareable, no amounts:** the Future Card appears in Lite results and the full Outlook.

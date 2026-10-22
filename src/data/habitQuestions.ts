@@ -28,13 +28,14 @@ export const HABIT_QUESTIONS: HabitQuestion[] = [
     ],
   },
   {
-    id: 'career',
-    topic: 'Career',
-    prompt: 'You get a job offer with 20% higher pay — but much longer hours. Would you take it?',
+    id: 'surprise',
+    topic: 'Surprises',
+    prompt: 'A $500 bill you didn’t expect lands tomorrow. How would you pay it?',
     options: [
-      { id: 'yes', label: 'Yes, while I’m young', signal: 'Income growth matters to you now', set: { career: 'pay' } },
-      { id: 'depends', label: 'Only if I’d learn a lot', signal: 'Skills and growth guide your choices', set: { career: 'growth' } },
-      { id: 'no', label: 'No — time is worth more', signal: 'Balance is important to you', set: { career: 'balance' } },
+      { id: 'savings', label: 'From my savings', signal: 'You have a cushion for surprises', set: { surprise: 'savings' } },
+      { id: 'family', label: 'Ask family to help', signal: 'Family is your safety net for now', set: { surprise: 'family' } },
+      { id: 'card', label: 'Credit card', signal: 'You’d lean on credit for surprises', set: { surprise: 'card' } },
+      { id: 'bnpl', label: 'Pay later / instalments', signal: 'You’d spread surprise costs over time', set: { surprise: 'bnpl' } },
     ],
   },
   {
@@ -76,6 +77,16 @@ export const HABIT_QUESTIONS: HabitQuestion[] = [
       { id: 'generous', label: 'Help as much as I can', signal: 'Family support is a top priority', set: { family: 'generous' } },
       { id: 'balanced', label: 'Help with a set amount I can sustain', signal: 'You support family within a plan', set: { family: 'balanced' } },
       { id: 'boundaries', label: 'Help in other ways — time, finding schemes', signal: 'You support family beyond money', set: { family: 'boundaries' } },
+    ],
+  },
+  {
+    id: 'tracking',
+    topic: 'Tracking',
+    prompt: 'Do you know roughly where last month’s money went?',
+    options: [
+      { id: 'yes', label: 'Yes — I track it', signal: 'You know where your money goes', set: { tracking: 'yes' } },
+      { id: 'roughly', label: 'Roughly', signal: 'You have a rough sense of your spending', set: { tracking: 'roughly' } },
+      { id: 'no', label: 'Honestly, no idea', signal: 'Your spending is a bit of a mystery right now', set: { tracking: 'no' } },
     ],
   },
 ];

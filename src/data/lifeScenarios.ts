@@ -5,7 +5,7 @@
 // long-term consequences are always computed from the same model as the outlook.
 
 import { COST_DEFAULTS, DOWNTURN_DROP } from '../engine/assumptions';
-import { STATUS_INFO, type Dreams, type Habits, type LifeStage, type Profile } from '../engine/profile';
+import { STATUS_INFO, lifeStage, type Dreams, type Habits, type LifeStage, type Profile } from '../engine/profile';
 import { resolveDream, type PlanEffect } from '../engine/plan';
 import type { Plan } from '../engine/types';
 
@@ -708,12 +708,16 @@ const MAX_CHAPTERS = 7;
  */
 export function selectScenarios(ctx: ScenarioCtx): { scenario: LifeScenario; age: number }[] {
   const byId = (id: string) => LIFE_SCENARIOS.find((s) => s.id === id)!;
-  const priority = ['first_offer', 'slow_month', 'move_out', 'pet', 'career_break', 'restructure', 'laptop', 'downturn', 'family_help', 'trip', 'insurance', 'scam'];
+  // Dream-linked chapters follow the user's own timing; everything else is matched to their current life stage.
+  const stage = lifeStage(ctx.profile);
+  const dreamLinked = ['move_out', 'pet', 'career_break'];
+  const priority = ['first_offer', 'slow_month', 'move_out', 'pet', 'career_break', 'restructure', 'late_client', 'laptop', 'grad_trip', 'bnpl', 'downturn', 'family_help', 'internship', 'job_scam', 'trip', 'insurance', 'scam'];
   const chosen: LifeScenario[] = [];
   let unexpected = false;
   for (const id of priority) {
     const s = byId(id);
     if (!s.applies(ctx)) continue;
+    if (s.stages && !s.stages.includes(stage) && !dreamLinked.includes(id)) continue;
     if (s.unexpected) {
       if (unexpected) continue;
       unexpected = true;

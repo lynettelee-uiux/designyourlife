@@ -1,6 +1,6 @@
 import { BASE_YEAR, COST_DEFAULTS, CPF_ALLOCATION_2026, type RiskLevel } from './assumptions';
 import { paycheck } from './paycheck';
-import { STATUS_INFO, type AspirationId, type DreamSelection, type Dreams, type Habits, type Overrides, type Profile } from './profile';
+import { STATUS_INFO, lifeStage, type AspirationId, type DreamSelection, type Dreams, type Habits, type Overrides, type Profile } from './profile';
 import type { DownturnResponse, IncomeAdjustment, IncomeGap, OneOffItem, Plan, RecurringItem } from './types';
 
 export const END_AGE = 65;
@@ -25,7 +25,8 @@ export function resolveDream(sel: DreamSelection, p: Profile): Required<Pick<Dre
   const a = p.age;
   const d: Record<AspirationId, Partial<DreamSelection>> = {
     retire_early: { age: 55, amount: 2500 },
-    travel: { count: 2, amount: COST_DEFAULTS.regionalTrip, age: Math.max(a, p.mainIncomeAge) },
+    // Students and NSFs: budget trips that can start now; others: regional trips once main work starts.
+    travel: ['student', 'ns'].includes(lifeStage(p)) ? { count: 2, amount: 600, age: a } : { count: 2, amount: COST_DEFAULTS.regionalTrip, age: Math.max(a, p.mainIncomeAge) },
     own_home: { age: Math.max(a + 6, 28), amount: 30000 },
     live_independently: { age: Math.max(a + 2, p.mainIncomeAge + 1), amount: COST_DEFAULTS.roomRent },
     pet: { age: Math.max(a + 2, p.mainIncomeAge + 1), variant: 'dog' },

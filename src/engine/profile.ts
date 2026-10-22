@@ -80,6 +80,8 @@ export type Dreams = Partial<Record<AspirationId, DreamSelection>>;
 export interface Habits {
   social?: 'low' | 'medium' | 'high';
   career?: 'pay' | 'balance' | 'growth';
+  surprise?: 'savings' | 'family' | 'card' | 'bnpl';
+  tracking?: 'yes' | 'roughly' | 'no';
   windfall?: 'save' | 'split' | 'invest' | 'treat';
   independence?: 'soon' | 'later' | 'stay';
   risk?: RiskLevel;
@@ -139,7 +141,7 @@ export function defaultProfile(age = 22, status: LifeStatus = 'uni_student'): Pr
     living: 'family',
     essentials: COST_DEFAULTS.essentialsWithFamily,
     lifestyle: COST_DEFAULTS.lifestyle,
-    familyAllowance: working ? COST_DEFAULTS.familyAllowance : 100,
+    familyAllowance: working ? COST_DEFAULTS.familyAllowance : 0,
     studentLoan: false,
     homeLoanMonthly: 0,
     homeLoanCpf: 0,

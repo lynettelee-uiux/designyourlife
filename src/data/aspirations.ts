@@ -32,9 +32,10 @@ export const ASPIRATIONS: AspirationDef[] = [
     tint: 'bg-navy-50',
     params: [
       { key: 'count', label: 'Trips a year', min: 0, max: 6, step: 1 },
+      { key: 'age', label: 'Starting from age', min: 18, max: 40, step: 1 },
       { key: 'amount', label: 'Budget per trip', min: 300, max: 8000, step: 100, prefix: '$', help: 'A regional trip might be ~$1,500; long-haul more like $4,000+' },
     ],
-    vision: (p) => `${p.count} trip${p.count === 1 ? '' : 's'} a year`,
+    vision: (p) => `${p.count} trip${p.count === 1 ? '' : 's'} a year from ${p.age}`,
   },
   {
     id: 'live_independently',
