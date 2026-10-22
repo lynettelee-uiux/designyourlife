@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActionBar, Button, Card, Icon, Segmented, Slider, cx } from '../components/ui';
 import { DISTANCE, DistanceBadge, DistanceBar } from '../components/Distance';
+import { LiteHero } from '../components/Hero';
 import { aspirationById } from '../data/aspirations';
 import { money } from '../engine/format';
 import { paycheck } from '../engine/paycheck';
@@ -142,14 +143,8 @@ function Intro({ eyebrow, title, children }: { eyebrow: string; title: string; c
 function StepYou({ input, set }: StepProps) {
   return (
     <>
-      <Intro eyebrow="Your future in 3 minutes" title="How close are your dreams?">
-        Tell us a little about your money, pick a few dreams, make three real-life decisions — and get a Future Card plus the money skills that would bring you closer.
-      </Intro>
-      <ul className="rise-2 -mt-1 mb-4 flex flex-wrap gap-2 text-xs font-semibold text-ink-soft" aria-label="About this">
-        {['About 4 minutes', 'Ranges, not exact numbers', 'No sign-up', 'Nothing saved'].map((t) => (
-          <li key={t} className="rounded-full bg-white px-3 py-1 shadow-card">{t}</li>
-        ))}
-      </ul>
+      <LiteHero />
+      <h2 className="mb-3 text-sm font-semibold text-ink-soft">First, a little about you</h2>
       <Card className="rise-2 space-y-6">
         <Slider label="Your age" value={input.age} min={18} max={35} onChange={(v) => set({ age: v })} />
         <fieldset>

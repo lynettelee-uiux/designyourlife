@@ -1,4 +1,5 @@
 import { Button, Icon } from '../components/ui';
+import { FloatingDreams, HowItWorks, VersionStack } from '../components/Hero';
 import { surpriseCharacter } from '../engine/profile';
 import { useStore } from '../state/store';
 
@@ -11,14 +12,17 @@ export default function Welcome() {
     <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-magenta-100 blur-3xl" />
     <div aria-hidden className="pointer-events-none absolute -left-32 top-64 h-72 w-72 rounded-full bg-navy-100 blur-3xl" />
     <main id="main" className="relative mx-auto flex min-h-[100dvh] max-w-xl flex-col px-5 pb-10 pt-8 sm:pt-14">
-      <div className="flex items-center gap-2">
-        <span aria-hidden className="grid h-8 w-8 place-items-center rounded-[10px] bg-navy-800">
-          <span className="h-3 w-3 rounded-full bg-magenta-500" />
-        </span>
-        <span className="display text-lg">Design Your Life</span>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="grid h-8 w-8 place-items-center rounded-[10px] bg-navy-800">
+            <span className="h-3 w-3 rounded-full bg-magenta-500" />
+          </span>
+          <span className="display text-lg">Design Your Life</span>
+        </div>
       </div>
+      <FloatingDreams className="mt-8 justify-end sm:mt-10" />
 
-      <section className="rise mt-10 sm:mt-14">
+      <section className="rise relative mt-2">
         <h1 className="display text-[40px] leading-[1.05] sm:text-[56px]">
           Your future isn’t decided.
           <span className="block text-magenta-600">Try a few versions.</span>
@@ -28,7 +32,15 @@ export default function Welcome() {
         </p>
       </section>
 
-      <Versions />
+      <VersionStack />
+
+      <HowItWorks
+        steps={[
+          { icon: 'Sparkles', title: 'Dream', text: 'Pick the life you want' },
+          { icon: 'Zap', title: 'Live it', text: 'Make real-life choices' },
+          { icon: 'Compass', title: 'See it', text: 'Change one thing' },
+        ]}
+      />
 
       <div className="rise-3 mt-8 flex flex-col gap-3 sm:flex-row">
         <Button className="sm:flex-1" iconRight="ArrowRight" onClick={() => dispatch({ type: 'go', stage: 'profile', step: 0 })}>
@@ -45,7 +57,7 @@ export default function Welcome() {
       )}
 
       <a href="./lite/" className="mt-3 self-center text-sm font-semibold text-ink-soft underline underline-offset-4 hover:text-ink">
-        Short on time? Try the 3-minute Lite version
+        Short on time? Try the 4-minute Lite version
       </a>
 
       <ul className="mt-10 space-y-3 text-sm text-ink-soft">
@@ -57,35 +69,6 @@ export default function Welcome() {
         How this works & our sources
       </button>
     </main>
-    </div>
-  );
-}
-
-/** Three stacked "versions" of a future — a calm, abstract illustration. */
-function Versions() {
-  const cards = [
-    { title: 'Version A', line: 'Own place at 25 · Dog · 2 trips a year', bar: 'bg-magenta-500', w: 'w-[72%]' },
-    { title: 'Version B', line: 'Stay home · Career break at 28', bar: 'bg-navy-800', w: 'w-[86%]' },
-    { title: 'Version C', line: 'Start a studio · Four-day week', bar: 'bg-navy-600', w: 'w-[58%]' },
-  ];
-  return (
-    <div aria-hidden className="rise-2 relative mt-10 h-[150px]">
-      {cards.map((c, i) => (
-        <div
-          key={c.title}
-          className="card absolute left-0 right-0 mx-auto p-4"
-          style={{ top: i * 30, transform: `scale(${1 - (2 - i) * 0.04})`, zIndex: i }}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink-mute">{c.title}</span>
-            <span className="h-2 w-2 rounded-full bg-mist-300" />
-          </div>
-          <p className="mt-1 text-sm font-semibold">{c.line}</p>
-          <div className="mt-3 h-1.5 rounded-full bg-mist-100">
-            <div className={`h-1.5 rounded-full ${c.bar} ${c.w}`} />
-          </div>
-        </div>
-      ))}
     </div>
   );
 }

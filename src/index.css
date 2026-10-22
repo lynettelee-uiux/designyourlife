@@ -42,10 +42,14 @@ input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px #FF8
 @property --p { syntax: '<number>'; inherits: false; initial-value: 0; }
 .ring-fill { background: conic-gradient(var(--c) calc(var(--p) * 1%), rgba(255,255,255,0.15) 0); transition: --p 1.1s cubic-bezier(.2,.8,.2,1); }
 
+@keyframes float { 0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); } 50% { transform: translateY(-8px) rotate(var(--r, 0deg)); } }
+.float { animation: float 6s ease-in-out infinite; }
+.float-slow { animation: float 8s ease-in-out infinite; }
+
 @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
 .pop { animation: pop .5s cubic-bezier(.2,.8,.2,1) both; }
 @media (prefers-reduced-motion: reduce) {
-  .rise, .rise-2, .rise-3, .pop { animation: none; }
+  .rise, .rise-2, .rise-3, .pop, .float, .float-slow { animation: none; }
   .ring-fill { transition: none; }
   * { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
