@@ -231,3 +231,15 @@ export function catchUp(you: Record<GroupId, { seen: number; share?: number }>, 
     .slice(0, n)
     .map((g) => g.id);
 }
+
+// ---------- Shuffled answers ----------
+
+/** A copy of the question with its options in random order (the answer index follows), so the right answer isn't always B. */
+export function shuffled(q: Question, rand = Math.random): Question {
+  const order = q.options.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return { ...q, options: order.map((i) => q.options[i]), answer: order.indexOf(q.answer) };
+}

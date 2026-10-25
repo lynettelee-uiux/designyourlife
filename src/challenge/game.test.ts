@@ -3,7 +3,7 @@ import { QUESTIONS } from './questions';
 import { SOURCES } from '../data/sources';
 import { AREAS, AREA_ORDER, GROUPS, groupRelevance, relevance, stageOf, type Area, type Player } from './areas';
 import { ageBand, leaderboard, peerAverage } from './peers';
-import { MAX_HEARTS, RETRY_GAP, addStats, catchUp, diagnose, forToday, groupScores, levelOf, maxTier, newProgress, nextQuestion, nextTier, pickQuestion, pointsFor, questionsFor, startTier, trackPosition, updateMistakes, type Answer, type Focus } from './game';
+import { MAX_HEARTS, RETRY_GAP, addStats, catchUp, diagnose, forToday, groupScores, levelOf, maxTier, newProgress, nextQuestion, nextTier, pickQuestion, pointsFor, questionsFor, shuffled, startTier, trackPosition, updateMistakes, type Answer, type Focus } from './game';
 
 const mixed = (p: Player): Focus => ({ kind: 'mixed', stage: stageOf(p), weights: relevance(p) });
 const student: Player = { age: 20, situation: 'studying' };
@@ -261,5 +261,23 @@ describe('Duolingo-style progression', () => {
     const peers = { everyday: 0.6, safety: 0.6, credit: 0.6, earning: 0.6, growing: 0.6, future: 0.6 };
     const rel = { everyday: 1, safety: 2, credit: 2, earning: 2, growing: 2, future: 1 } as const;
     expect(catchUp(you, peers, rel)).toEqual(['credit', 'everyday']);
+  });
+});
+
+describe('shuffled answers', () => {
+  it('keeps the same options and the right answer, in a new order', () => {
+    const q = QUESTIONS.find((x) => x.id === 'pay-own-cpf')!;
+    const s = shuffled(q, () => 0);
+    expect([...s.options].sort()).toEqual([...q.options].sort());
+    expect(s.options[s.answer]).toBe(q.options[q.answer]);
+  });
+
+  it('spreads the right answer across positions (not mostly B)', () => {
+    let seed = 7;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const counts = [0, 0, 0];
+    for (let k = 0; k < 20; k++) for (const q of QUESTIONS) counts[shuffled(q, rand).answer]++;
+    const total = counts.reduce((a, b) => a + b, 0);
+    for (const c of counts) expect(c / total).toBeGreaterThan(0.25);
   });
 });

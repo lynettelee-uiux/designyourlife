@@ -4,7 +4,7 @@ import { QUESTIONS, type Question, type Tier } from './questions';
 import { AREAS, GROUPS, SITUATIONS, STAGE_INFO, groupById, groupRelevance, relevance, stageOf, type Area, type GroupId, type Player, type Relevance } from './areas';
 import {
   LEVELS, MAX_HEARTS, RETRY_GAP, SPRINT_SECONDS, UNLOCK_AT, addStats, catchUp, groupScores, levelOf, loadProgress, maxTier, nextQuestion, nextTier, pointsFor,
-  questionsFor, saveProgress, startTier, trackPosition, updateMistakes,
+  questionsFor, saveProgress, shuffled, startTier, trackPosition, updateMistakes,
   type Answer, type Focus, type Progress,
 } from './game';
 import { SkillRadar } from './SkillRadar';
@@ -87,7 +87,7 @@ export default function ChallengeApp() {
       msLeft: SPRINT_SECONDS * 1000, before: { xp: progress.xp, best: progress.best },
     };
     const first = nextQuestion(QUESTIONS, { tier, asked: r.asked, roundAreas: r.areas, focus, answers: [], retries: [], past });
-    r.current = first.question;
+    r.current = first.question && shuffled(first.question);
     r.retry = first.retry;
     setRound(r);
     setPhase('play');
@@ -354,7 +354,8 @@ function Home({
           </div>
 
           <TopicDive player={player} out={out} onStart={onStart} />
-          <Compare player={player} progress={progress} onPractise={(g) => onStart('practice', g)} />
+          {Object.values(progress.stats).some((x) => x && x.seen > 0) && <FocusAreas player={player} progress={progress} onPractise={(g) => onStart('practice', g)} />}
+          <Compare player={player} progress={progress} />
         </>
       )}
 
@@ -395,20 +396,63 @@ function TopicDive({ player, out, onStart }: { player: Player; out: boolean; onS
   );
 }
 
+interface Priority {
+  id: GroupId;
+  reason: string;
+}
+
 /**
- * The hook: how you compare with players your age (demo data), then the two areas to catch up on.
- * The full leaderboard is one tap away.
+ * The two areas to work on first: furthest below players your age (core at your stage first),
+ * topped up with untried core areas, then your lowest score so far.
  */
-function Compare({ player, progress, onPractise }: { player: Player; progress: Progress; onPractise: (g: GroupId) => void }) {
+function priorities(player: Player, progress: Progress): Priority[] {
+  const you = groupScores(progress.stats);
+  const peers = peerAverage(player);
+  const rel = Object.fromEntries(GROUPS.map((g) => [g.id, groupRelevance(player, g)])) as Record<GroupId, Relevance>;
+  const band = ageBand(player.age).label;
+  const out: Priority[] = catchUp(you, peers, rel).map((id) => {
+    const gap = Math.round((peers[id] - (you[id].share ?? 0)) * 100);
+    return { id, reason: `${rel[id] === 2 ? 'Core at your stage · ' : ''}${gap} points below players aged ${band} (demo)` };
+  });
+  for (const g of GROUPS) {
+    if (out.length >= 2) break;
+    if (!you[g.id].seen && rel[g.id] === 2 && !out.some((p) => p.id === g.id)) out.push({ id: g.id, reason: 'Core at your stage · not tried yet' });
+  }
+  const played = GROUPS.filter((g) => you[g.id].seen && !out.some((p) => p.id === g.id)).sort((a, b) => (you[a.id].share ?? 0) - (you[b.id].share ?? 0));
+  for (const g of played) {
+    if (out.length >= 2) break;
+    out.push({ id: g.id, reason: `Your lowest score so far (${Math.round((you[g.id].share ?? 0) * 100)}%)` });
+  }
+  return out.slice(0, 2);
+}
+
+/** Numbered, so it's obvious what to work on first. */
+function FocusAreas({ player, progress, onPractise, showReading }: { player: Player; progress: Progress; onPractise: (g: GroupId) => void; showReading?: boolean }) {
+  const list = priorities(player, progress);
+  if (!list.length) return null;
+  const you = groupScores(progress.stats);
+  const peers = peerAverage(player);
+  return (
+    <section className="mt-8" aria-labelledby="focus-h">
+      <h2 id="focus-h" className="sp-title text-2xl">Your top {list.length === 1 ? 'focus area' : `${list.length} focus areas`}</h2>
+      <p className="mt-1 text-sm text-sp-soft">Strengthen these first — they’ll lift your score the most.</p>
+      <ol className="mt-3 space-y-3">
+        {list.map((p, i) => (
+          <FocusCard key={p.id} rank={i + 1} p={p} you={you[p.id]} peer={peers[p.id]} stats={progress.stats} onPractise={() => onPractise(p.id)} showReading={showReading} />
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** How you compare with players your age (demo data) and where you'd rank. */
+function Compare({ player, progress }: { player: Player; progress: Progress }) {
   const you = groupScores(progress.stats);
   const peers = peerAverage(player);
   const band = ageBand(player.age).label;
   const rel = Object.fromEntries(GROUPS.map((g) => [g.id, groupRelevance(player, g)])) as Record<GroupId, Relevance>;
   const board = leaderboard(player, progress.best);
   const me = board.find((r) => r.you);
-  const played = GROUPS.some((g) => you[g.id].seen > 0);
-  const focus = catchUp(you, peers, rel);
-  const untried = GROUPS.filter((g) => !you[g.id].seen && rel[g.id] === 2);
 
   return (
     <section className="mt-8" aria-labelledby="cmp-h">
@@ -426,28 +470,6 @@ function Compare({ player, progress, onPractise }: { player: Player; progress: P
       <div className="sp-card mt-3 p-4">
         <SkillRadar you={you} peers={peers} rel={rel} bandLabel={band} />
       </div>
-
-      {played && (
-        <div className="mt-5">
-          <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-sp-mute">{focus.length ? 'Catch up on' : 'You’re ahead everywhere you’ve played'}</h3>
-          <ul className="mt-2 space-y-2.5">
-            {focus.map((id) => (
-              <CatchUpCard key={id} id={id} you={you[id]} peer={peers[id]} stats={progress.stats} onPractise={() => onPractise(id)} />
-            ))}
-            {!focus.length && untried[0] && (
-              <li className="sp-card p-4 text-sm text-sp-soft">
-                Next, try <strong className="text-white">{untried[0].title}</strong> — it’s core at your stage.{' '}
-                <button type="button" className="sp-link" onClick={() => onPractise(untried[0].id)}>
-                  Practise it
-                </button>
-              </li>
-            )}
-          </ul>
-        </div>
-      )}
-
-      <CheckOut groups={focus.length ? focus : GROUPS.filter((g) => rel[g.id] === 2).map((g) => g.id)} behind={focus.length > 0} />
-
       <details className="group mt-4">
         <summary className="sp-link inline-flex cursor-pointer items-center gap-1 text-sm">
           This week’s leaderboard <Icon name="ChevronDown" className="h-4 w-4 transition-transform group-open:rotate-180" />
@@ -459,9 +481,9 @@ function Compare({ player, progress, onPractise }: { player: Player; progress: P
 }
 
 /** "You may want to check out…": readings and tools for the areas to work on, MoneySense first, one tap away. */
-function CheckOut({ groups, behind }: { groups: GroupId[]; behind: boolean }) {
+function CheckOut({ list }: { list: Priority[] }) {
   const seen = new Set<string>(); // each reading appears once, under the first area that needs it
-  const items = groups.flatMap((id) => {
+  const items = list.flatMap(({ id }) => {
     const g = groupById(id);
     const links = g.areas
       .flatMap((a) => AREAS[a].readings)
@@ -477,16 +499,16 @@ function CheckOut({ groups, behind }: { groups: GroupId[]; behind: boolean }) {
         <Icon name="BookOpen" className="h-5 w-5 text-sp-blue" />
         <span className="flex-1">
           <span className="block text-sm font-semibold">You may want to check out…</span>
-          <span className="block text-xs text-sp-mute">{behind ? 'Readings and tools for the areas to catch up on' : 'Readings and tools for what matters at your stage'}</span>
+          <span className="block text-xs text-sp-mute">Articles and tools for your focus areas, in order</span>
         </span>
         <Icon name="ChevronDown" className="h-4 w-4 text-sp-mute transition-transform group-open:rotate-180" />
       </summary>
       <div className="space-y-4 px-5 pb-5">
-        {items.map(({ g, links, practise }) => (
+        {items.map(({ g, links, practise }, i) => (
           <div key={g.id}>
             <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-sp-mute">
-              <Icon name={g.icon} className="h-3.5 w-3.5" />
-              {g.title}
+              <span className="grid h-5 w-5 place-items-center rounded-full bg-sp-pink text-[10px] text-white">{i + 1}</span>
+              Focus {i + 1} · {g.title}
             </h4>
             <ul className="mt-2 space-y-1.5">
               {links.map((r) => (
@@ -516,38 +538,51 @@ function CheckOut({ groups, behind }: { groups: GroupId[]; behind: boolean }) {
   );
 }
 
-function CatchUpCard({ id, you, peer, stats, onPractise }: { id: GroupId; you: { right: number; seen: number; share?: number }; peer: number; stats: Progress['stats']; onPractise: () => void }) {
-  const g = groupById(id);
+function FocusCard({ rank, p, you, peer, stats, onPractise, showReading }: { rank: number; p: Priority; you: { right: number; seen: number; share?: number }; peer: number; stats: Progress['stats']; onPractise: () => void; showReading?: boolean }) {
+  const g = groupById(p.id);
   // Advice comes from the weaker of the area's two skills.
-  const share = (a: Area) => (stats[a]?.seen ? stats[a]!.right / stats[a]!.seen : 1);
+  const share = (a: Area) => (stats[a]?.seen ? stats[a]!.right / stats[a]!.seen : 0);
   const weakest = [...g.areas].sort((a, b) => share(a) - share(b))[0];
   const info = AREAS[weakest];
   const reading = info.readings[0];
   return (
-    <li className="sp-card p-4">
-      <div className="flex items-center gap-2">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-sp-pink/15 text-sp-pink">
-          <Icon name={g.icon} className="h-4 w-4" />
-        </span>
-        <h4 className="flex-1 font-semibold">{g.title}</h4>
-        <span className="text-xs font-semibold text-sp-mute">
-          You {Math.round((you.share ?? 0) * 100)}% · Peers {Math.round(peer * 100)}%
-        </span>
+    <li className={cx('sp-card p-4', rank === 1 && '!border-sp-pink/60 border-2')}>
+      <div className="flex items-start gap-3">
+        <span className={cx('sp-title grid h-9 w-9 shrink-0 place-items-center rounded-xl text-lg', rank === 1 ? 'bg-sp-pink-fill text-white' : 'bg-white/10 text-sp-soft')}>{rank}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold">{g.title}</h3>
+            {rank === 1 && <span className="rounded-full bg-sp-pink/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sp-pink">Start here</span>}
+          </div>
+          <p className="mt-0.5 text-xs text-sp-mute">{p.reason}</p>
+        </div>
       </div>
-      <div className="relative mt-3 h-2 rounded-full bg-white/10" aria-hidden>
-        <div className="h-2 rounded-full bg-sp-pink" style={{ width: `${Math.max(4, (you.share ?? 0) * 100)}%` }} />
-        <span className="absolute -top-1 h-4 w-0.5 rounded bg-sp-blue" style={{ left: `${peer * 100}%` }} />
-      </div>
-      <p className="mt-3 text-sm leading-relaxed text-sp-soft">{info.tip}</p>
+      {you.seen > 0 && (
+        <div className="mt-3">
+          <div className="flex justify-between text-[11px] font-semibold text-sp-mute">
+            <span>You {Math.round((you.share ?? 0) * 100)}%</span>
+            <span>Peers {Math.round(peer * 100)}%</span>
+          </div>
+          <div className="relative mt-1 h-2 rounded-full bg-white/10" aria-hidden>
+            <div className="h-2 rounded-full bg-sp-pink" style={{ width: `${Math.max(4, (you.share ?? 0) * 100)}%` }} />
+            <span className="absolute -top-1 h-4 w-0.5 rounded bg-sp-blue" style={{ left: `${peer * 100}%` }} />
+          </div>
+        </div>
+      )}
+      <p className="mt-3 text-sm leading-relaxed text-sp-soft">
+        <strong className="text-white">Try this week:</strong> {info.tip}
+      </p>
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         <button type="button" className="sp-link" onClick={onPractise}>
           Practise {g.title.toLowerCase()} →
         </button>
-        <a href={reading.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sp-soft underline-offset-4 hover:underline">
-          {reading.label} · {reading.org}
-          <Icon name="ExternalLink" className="h-3.5 w-3.5" />
-          <span className="sr-only">(opens in a new tab)</span>
-        </a>
+        {showReading && (
+          <a href={reading.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sp-soft underline-offset-4 hover:underline">
+            Read: {reading.label} · {reading.org}
+            <Icon name="ExternalLink" className="h-3.5 w-3.5" />
+            <span className="sr-only">(opens in a new tab)</span>
+          </a>
+        )}
       </div>
     </li>
   );
@@ -632,7 +667,7 @@ function Play({
     const n = nextQuestion(QUESTIONS, { tier, asked: round.asked, roundAreas: round.areas, focus: round.focus, answers: round.answers, retries: round.retries, past: round.past });
     if (!n.question) return onFinish(round, 'questions');
     const retries = round.retries.filter((r) => r.id !== n.question!.id);
-    setRound({ ...round, tier, current: n.question, retry: n.retry, retries, chosen: undefined });
+    setRound({ ...round, tier, current: shuffled(n.question), retry: n.retry, retries, chosen: undefined });
   };
 
   // Number keys 1–4 pick an answer; Enter moves on.
@@ -805,8 +840,10 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
         </div>
       </section>
 
+      {progress.player && <FocusAreas player={progress.player} progress={progress} onPractise={(g) => onAgain('practice', g)} showReading />}
+
       {sprint && (
-        <section className="sp-card mt-5 p-5" aria-label="Your progress">
+        <section className="sp-card mt-8 p-5" aria-label="Your progress">
           <div className="mb-4 flex items-center justify-between text-sm">
             <span className="font-semibold text-sp-soft">Hearts left today</span>
             <Hearts n={progress.hearts} />
@@ -832,7 +869,9 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
         )}
       </div>
 
-      {progress.player && <Compare player={progress.player} progress={progress} onPractise={(g) => onAgain('practice', g)} />}
+      {progress.player && <Compare player={progress.player} progress={progress} />}
+      {/* Readings come after a round: they point at what this round showed you need. */}
+      {progress.player && <CheckOut list={priorities(progress.player, progress)} />}
 
       {round.answers.length > 0 && (
         <details className="sp-card group mt-6">
