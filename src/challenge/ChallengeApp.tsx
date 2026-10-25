@@ -490,19 +490,24 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
   const headline =
     round.endedBy === 'hearts' ? 'Out of hearts!' : round.endedBy === 'time' ? 'Time’s up!' : round.endedBy === 'questions' ? 'You answered every question!' : 'Practice done';
 
+  const link = `${window.location.origin}${window.location.pathname}?beat=${right}`;
+  const message = `I got ${right} right in a 60-second Design Your Life money sprint. Can you beat it?`;
+
+  const copy = async () => {
+    setShared((await copyText(`${message} ${link}`)) ? 'Link copied — paste it in a chat to challenge a friend.' : 'Couldn’t copy automatically — select the link below and copy it.');
+  };
+
   const share = async () => {
-    const url = `${window.location.origin}${window.location.pathname}?beat=${right}`;
-    const text = `I got ${right} right in a 60-second Design Your Life money sprint. Can you beat it?`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: 'Design Your Life — Sprint', text, url });
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Design Your Life — Sprint', text: message, url: link });
+        setShared('Shared — may the best saver win!');
         return;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') return; // they closed the share sheet
       }
-      await navigator.clipboard.writeText(`${text} ${url}`);
-      setShared('Link copied — send it to a friend.');
-    } catch {
-      setShared('');
     }
+    await copy(); // no share sheet here (or it failed): copy instead
   };
 
   return (
@@ -510,7 +515,7 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
       <section className="pop relative overflow-hidden rounded-[28px] bg-gradient-to-br from-navy-800 via-[#2F1A6E] to-magenta-600 p-6 text-center text-white">
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-magenta-300">{headline}</p>
         <h1 className="display mt-2 text-[34px] leading-tight text-white">
-          {right} right{sprint ? ` in ${Math.max(1, Math.round(SPRINT_SECONDS - round.msLeft / 1000))} seconds` : ` of ${round.answers.length}`}
+          {right} right{sprint ? ` in ${secondsLabel(SPRINT_SECONDS - round.msLeft / 1000)}` : ` of ${round.answers.length}`}
         </h1>
         {sprint && <p className="mt-1 text-navy-100">+{round.points} points</p>}
         <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs font-bold">
@@ -630,15 +635,58 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
           </Button>
         )}
         {sprint && right > 0 && (
-          <Button variant="secondary" icon="Share2" onClick={share}>
-            Challenge a friend to beat {right}
-          </Button>
+          <section className="rounded-3xl border-2 border-dashed border-magenta-300 bg-white p-4" aria-labelledby="dare-h">
+            <h2 id="dare-h" className="flex items-center gap-2 font-semibold">
+              <Icon name="Trophy" className="h-5 w-5 text-magenta-600" />
+              Challenge a friend to beat {right}
+            </h2>
+            <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+              <Button variant="accent" icon="Share2" onClick={share}>
+                Share
+              </Button>
+              <Button variant="secondary" onClick={copy}>
+                Copy link
+              </Button>
+            </div>
+            <label className="mt-3 block text-xs font-semibold text-ink-mute">
+              Or copy this link
+              <input readOnly value={link} onFocus={(e) => e.currentTarget.select()} className="mt-1 w-full rounded-xl border border-mist-300 bg-mist-50 px-3 py-2 text-sm font-normal text-ink" />
+            </label>
+            <p className="mt-2 min-h-[1.25rem] text-sm font-semibold text-sage-700" aria-live="polite">{shared}</p>
+          </section>
         )}
         <Button variant="ghost" onClick={onHome}>
           Back to start
         </Button>
-        <p className="text-center text-sm text-ink-mute" aria-live="polite">{shared}</p>
       </div>
     </>
   );
 }
+
+/** Copies text, falling back to a hidden textarea where the Clipboard API isn't allowed. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const t = document.createElement('textarea');
+      t.value = text;
+      t.setAttribute('readonly', '');
+      t.style.position = 'fixed';
+      t.style.opacity = '0';
+      document.body.appendChild(t);
+      t.select();
+      const ok = document.execCommand('copy');
+      t.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+const secondsLabel = (s: number) => {
+  const n = Math.max(1, Math.round(s));
+  return `${n} second${n === 1 ? '' : 's'}`;
+};
