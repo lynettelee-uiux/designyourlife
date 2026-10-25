@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActionBar, Button, Card, Icon, Segmented, Slider, cx } from '../components/ui';
 import { DISTANCE, DistanceBadge, DistanceBar } from '../components/Distance';
 import { LiteHero } from '../components/Hero';
+import { GuessPanel, LessonReveal, LessonsRecap, guessAnswer } from '../components/Learning';
 import { FutureCard, ShareBar, SkillCard, dreamEmoji, verdictHeadline } from '../components/FutureCard';
 import { dreamOptions } from './dreamOptions';
 import { aspirationById } from '../data/aspirations';
@@ -55,7 +56,7 @@ export default function LiteApp() {
   const chapter = result.chapters[Math.min(sub, moments - 1)];
   const picked = Object.keys(input.dreams).length;
   const incomeReady = Object.values(input.income).every((b) => b !== undefined);
-  const canNext = step === 1 ? incomeReady : step === 3 ? result.goals.length > 0 : step === 4 ? !chapter || !!input.decisions[chapter.scenario.id] : true;
+  const canNext = step === 1 ? incomeReady : step === 3 ? result.goals.length > 0 : step === 4 ? !chapter || (!!input.decisions[chapter.scenario.id] && !!input.guesses?.[chapter.scenario.id]) : true;
 
   const next = () => {
     if (step === 2 && sub < HABIT_QS.length - 1) return setSub(sub + 1);
@@ -72,7 +73,7 @@ export default function LiteApp() {
     step === 1 ? (incomeReady ? 'Next' : 'Pick a range for each') :
     step === 2 ? 'Skip' :
     step === 3 ? (picked ? 'Let life happen' : 'Pick a dream') :
-    step === 4 ? (!canNext ? 'Make a choice' : sub < moments - 1 ? 'Next moment' : 'See my results') : 'Next';
+    step === 4 ? (!canNext ? (chapter && input.decisions[chapter.scenario.id] ? 'Make a guess' : 'Make a choice') : sub < moments - 1 ? 'Got it — next moment' : 'See my results') : 'Next';
 
   return (
     <>
@@ -440,6 +441,7 @@ function StepMoment({ input, set, result, index }: StepProps & { result: LiteRes
   if (!ch) return <Intro eyebrow="Life happens" title="No surprises this time" />;
   const s = ch.scenario;
   const choice = s.choices.find((c) => c.id === decided);
+  const guess = input.guesses?.[s.id];
   return (
     <>
       <Intro eyebrow={`Life happens · moment ${index + 1} of ${result.chapters.length}`} title={s.title} />
@@ -462,7 +464,12 @@ function StepMoment({ input, set, result, index }: StepProps & { result: LiteRes
               key={c.id}
               type="button"
               aria-pressed={c.id === decided}
-              onClick={() => set({ decisions: { ...input.decisions, [s.id]: c.id } })}
+              onClick={() => {
+                if (c.id === decided) return;
+                const guesses = { ...(input.guesses ?? {}) };
+                delete guesses[s.id];
+                set({ decisions: { ...input.decisions, [s.id]: c.id }, guesses });
+              }}
               className={cx('w-full rounded-2xl border px-4 py-3.5 text-left text-[15px] font-semibold transition-colors', c.id === decided ? 'border-navy-800 bg-navy-50' : 'border-mist-300 bg-white hover:border-ink-soft')}
             >
               {c.label}
@@ -470,17 +477,15 @@ function StepMoment({ input, set, result, index }: StepProps & { result: LiteRes
           ))}
         </div>
       </Card>
-      {choice && (
+      {choice && !guess && <GuessPanel age={ch.age} onGuess={(g) => set({ guesses: { ...(input.guesses ?? {}), [s.id]: g } })} />}
+      {choice && guess && <LessonReveal guess={guess} impact={impact} lesson={choice.reflection} title={s.learn.title} />}
+      {choice && guess && (
         <Card className="pop mt-3" as="div" key={`${s.id}-${choice.id}`}>
           <p className="eyebrow">What happens</p>
           <p className="mt-1 text-[16px] leading-relaxed">{choice.outcome(result.ctx, ch.age)}</p>
           <p className="mt-3 text-sm">
             Savings at {ch.age + 1}:{' '}
             <strong className={cx('tabular', impact < -1 ? 'text-magenta-700' : impact > 1 ? 'text-sage-700' : 'text-ink')}>{Math.abs(impact) < 1 ? 'about the same' : `${money(impact, { sign: true })} vs if this hadn’t happened`}</strong>
-          </p>
-          <p className="mt-3 rounded-2xl bg-blush-100 p-3 text-sm leading-relaxed">
-            <strong>Money lesson: </strong>
-            {choice.reflection}
           </p>
         </Card>
       )}
@@ -506,7 +511,16 @@ function StepResults({ input, set, result, onRestart }: StepProps & { result: Li
   const skills = pickSkills({ goals: result.goals, status: p.status, moments, habits: input.habits, monthlyLeftover: nowSnap.surplus, lifestyleShare: takeHome > 0 ? lifestyleFrom(input.habits) / takeHome : undefined, invested: investNow > 0, dreamTitle: title });
   const strong = strengths({ goals: result.goals, status: p.status, living: input.living, moments, habits: input.habits, investMonthly: investNow, dreamTitle: title });
   const near = result.goals.filter((g) => g.status === 'on_track').length;
+  const learned = result.chapters
+    .filter((c) => input.decisions[c.scenario.id])
+    .map((c) => {
+      const choice = c.scenario.choices.find((x) => x.id === input.decisions[c.scenario.id])!;
+      const g = input.guesses?.[c.scenario.id];
+      const m = moments.find((x) => x.scenario === c.scenario.id);
+      return { title: c.scenario.learn.title, lesson: choice.reflection, right: g ? g === guessAnswer(m?.impact ?? 0) : undefined };
+    });
   const card: CardData = {
+    lessons: learned.length,
     headline: verdictHeadline(near, result.goals.length),
     quote: futureQuote(result.goals),
     strength: strong.find((t) => !t.includes('within reach')) ?? strong[0],
@@ -524,6 +538,7 @@ function StepResults({ input, set, result, onRestart }: StepProps & { result: Li
 
       <FutureCard data={card} />
       <ShareBar data={card} />
+      <LessonsRecap items={learned} />
 
       <section className="mt-8" aria-labelledby="strengths-h">
         <h2 id="strengths-h" className="display text-xl">Your strengths in this version</h2>

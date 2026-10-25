@@ -52,7 +52,9 @@ export function FutureCard({ data }: { data: CardData }) {
           </span>
           <span className="text-sm font-bold">Design Your Life</span>
         </div>
-        <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.14em] text-magenta-300">My Future Card</p>
+        <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.14em] text-magenta-300">
+          My Future Card{data.lessons ? ` · ${data.lessons} money lessons learned` : ''}
+        </p>
         <p className="display mt-1 text-[26px] leading-tight text-white">{data.headline}</p>
         <ul className={cx('mt-5 grid gap-3', data.dreams.length === 1 ? 'grid-cols-1' : data.dreams.length === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
           {data.dreams.map((d, i) => (

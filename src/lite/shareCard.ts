@@ -5,6 +5,8 @@
 import type { GoalStatus } from '../engine/goals';
 
 export interface CardData {
+  /** Money lessons learned in the story — shown on the card to signal learning, not just a score. */
+  lessons?: number;
   headline: string;
   quote: string;
   strength: string;
@@ -84,7 +86,7 @@ export async function drawCard(data: CardData): Promise<Blob> {
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = '#FF8CC2';
   ctx.font = `700 28px ${FONT}`;
-  ctx.fillText('MY FUTURE CARD', pad, 240);
+  ctx.fillText(data.lessons ? `MY FUTURE CARD  ·  ${data.lessons} MONEY LESSONS LEARNED` : 'MY FUTURE CARD', pad, 240);
   ctx.fillStyle = '#FFFFFF';
   ctx.font = `800 66px ${FONT}`;
   let y = 318;

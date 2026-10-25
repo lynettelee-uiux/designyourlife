@@ -27,7 +27,7 @@ Open http://localhost:5173 (full) or http://localhost:5173/lite/ (Lite).
 | Script | What it does |
 |---|---|
 | `npm run dev` | Dev server with hot reload |
-| `npm test` | Run 82 automated tests (CPF, tax, projections, scenarios) |
+| `npm test` | Run 84 automated tests (CPF, tax, projections, scenarios) |
 | `npm run typecheck` | TypeScript strict check |
 | `npm run build` | Type-check and build static files to `dist/` |
 | `npm run preview` | Serve the production build locally |

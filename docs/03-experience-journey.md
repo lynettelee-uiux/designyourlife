@@ -60,3 +60,12 @@ Both versions now apply the same principles; the full version stays more detaile
 - **Stage-matched moments:** scenarios are tagged by life stage (student, NS, early career, established). Dream-linked chapters follow the user's own timing.
 - **Habits → skills:** money-habit questions (e.g. surprise bill, tracking) feed three personalised money skills, each collapsed to title + why, with a tip, quick check and official link on tap.
 - **Shareable, no amounts:** the Future Card appears in Lite results and the full Outlook.
+
+## Learning design: predict → reveal → recap
+User feedback: people treated the experience like a quiz and skipped the "nuggets". The learning is now part of the quiz:
+- **Quick guess:** after each choice, users predict whether savings end up higher, lower or about the same, before anything is revealed (prediction makes people attend to the answer).
+- **Lesson first:** the reveal leads with right/not quite and the money lesson; numbers follow.
+- **Recap:** "What you learned" lists the lessons unlocked and "guesses right: x of y"; the Future Card shows "N money lessons learned".
+
+## Positioning
+Not a calculator (which answers one question) or a budgeting app (which tracks the past): a safe practice run for real Singapore money decisions, where you guess, decide and learn why — personalised to life stage, with nothing sold and nothing saved.

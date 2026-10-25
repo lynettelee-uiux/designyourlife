@@ -6,6 +6,7 @@ import { money } from '../engine/format';
 import type { AspirationId } from '../engine/profile';
 import type { GoalStatus } from '../engine/goals';
 import { compareChoice, downturnPaths, useSimulation } from '../state/sim';
+import { GuessPanel, LessonReveal } from '../components/Learning';
 import { monthlySnapshot } from '../engine/projection';
 import { useStore } from '../state/store';
 
@@ -18,6 +19,7 @@ export default function LifeHappens() {
   const ch = chapters[idx];
   const choiceId = ch ? state.decisions[ch.scenario.id] : undefined;
   const choice = ch?.scenario.choices.find((c) => c.id === choiceId);
+  const guess = ch ? state.guesses?.[ch.scenario.id] : undefined;
   const allDone = chapters.every((c) => state.decisions[c.scenario.id]);
   const resultRef = useRef<HTMLDivElement>(null);
 
@@ -25,7 +27,7 @@ export default function LifeHappens() {
 
   useEffect(() => {
     if (choiceId && resultRef.current) resultRef.current.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-  }, [choiceId]);
+  }, [choiceId, guess]);
 
   if (!ch) return null;
   const s = ch.scenario;
@@ -66,8 +68,10 @@ export default function LifeHappens() {
         </div>
       </Card>
 
-      {choice && cmp && (
+      {choice && cmp && !guess && <GuessPanel age={ch.age} onGuess={(g) => dispatch({ type: 'guess', scenarioId: s.id, guess: g })} />}
+      {choice && cmp && guess && (
         <div ref={resultRef} className="mt-4 scroll-mt-28 space-y-3" aria-live="polite">
+          <LessonReveal guess={guess} impact={cmp.liquidNextAfter - cmp.liquidNextBefore} lesson={choice.reflection} title={s.learn.title} />
           <Card className="rise">
             <p className="eyebrow">What happens</p>
             <p className="mt-1 text-[16px] leading-relaxed">{choice.outcome(ctx, ch.age)}</p>
@@ -104,12 +108,6 @@ export default function LifeHappens() {
             {s.id === 'first_offer' && <FirstPay age={ch.age} />}
           </Card>
 
-          <section className="rounded-3xl bg-blush-100 p-5">
-            <p className="flex items-center gap-2 text-sm font-semibold">
-              <Icon name="Lightbulb" className="h-4 w-4" /> Reflect
-            </p>
-            <p className="mt-1 text-[15px] leading-relaxed">{choice.reflection}</p>
-          </section>
 
           <section className="rounded-3xl border border-mist-200 bg-white p-5">
             <p className="text-sm font-semibold">{s.learn.title}</p>
@@ -145,11 +143,11 @@ export default function LifeHappens() {
           Back
         </Button>
         {idx < chapters.length - 1 ? (
-          <Button iconRight="ArrowRight" disabled={!choiceId} onClick={() => setI(idx + 1)}>
-            {choiceId ? 'Next chapter' : 'Make a choice'}
+          <Button iconRight="ArrowRight" disabled={!choiceId || !guess} onClick={() => setI(idx + 1)}>
+            {!choiceId ? 'Make a choice' : !guess ? 'Make a guess' : 'Got it — next chapter'}
           </Button>
         ) : (
-          <Button iconRight="ArrowRight" disabled={!allDone} onClick={() => dispatch({ type: 'go', stage: 'outlook' })}>
+          <Button iconRight="ArrowRight" disabled={!allDone || !guess} onClick={() => dispatch({ type: 'go', stage: 'outlook' })}>
             {allDone ? 'See my outlook' : 'Finish every chapter'}
           </Button>
         )}

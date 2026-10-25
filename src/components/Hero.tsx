@@ -91,12 +91,12 @@ export function LiteHero() {
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-magenta-300">Your future in 4 minutes</p>
           <h1 className="display mt-1 text-[26px] leading-[1.1] text-white">How close are your dreams?</h1>
-          <p className="mt-2 text-[13px] leading-relaxed text-navy-100">A few taps about your money, three real-life decisions — then your Future Card.</p>
+          <p className="mt-2 text-[13px] leading-relaxed text-navy-100">Not a calculator or a budgeting app — a safe practice run for real money decisions. Guess, decide, and learn why.</p>
         </div>
         <MiniCard />
       </div>
       <ul className="relative mt-4 flex flex-wrap gap-1.5 text-[11px] font-semibold" aria-label="About this">
-        {['Ranges, not exact numbers', 'No sign-up', 'Nothing saved'].map((t) => (
+        {['Made for Singapore youths', 'Ranges, not exact numbers', 'Nothing sold or saved'].map((t) => (
           <li key={t} className="rounded-full bg-white/15 px-2.5 py-1">{t}</li>
         ))}
       </ul>

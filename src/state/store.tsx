@@ -22,6 +22,8 @@ export interface AppState {
   habits: Habits;
   habitEdits: Partial<HabitDefaults>;
   decisions: Record<string, string>;
+  /** Quick guesses (higher / lower / same savings) made before each outcome is revealed. */
+  guesses: Record<string, 'up' | 'down' | 'same'>;
   overrides: Overrides;
   saveLocally: boolean;
   furthest: number;
@@ -37,6 +39,7 @@ export const initialState = (): AppState => ({
   habits: {},
   habitEdits: {},
   decisions: {},
+  guesses: {},
   overrides: {},
   saveLocally: true,
   furthest: -1,
@@ -54,6 +57,7 @@ type Action =
   | { type: 'habitEdits'; edits: Partial<HabitDefaults> }
   | { type: 'decide'; scenarioId: string; choiceId: string }
   | { type: 'undecide'; scenarioId: string }
+  | { type: 'guess'; scenarioId: string; guess: 'up' | 'down' | 'same' }
   | { type: 'overrides'; overrides: Overrides }
   | { type: 'saveLocally'; value: boolean }
   | { type: 'reset' };
@@ -80,12 +84,20 @@ function reducer(s: AppState, a: Action): AppState {
       return { ...s, habits: a.habits };
     case 'habitEdits':
       return { ...s, habitEdits: { ...s.habitEdits, ...a.edits } };
-    case 'decide':
-      return { ...s, decisions: { ...s.decisions, [a.scenarioId]: a.choiceId } };
+    case 'decide': {
+      if (s.decisions[a.scenarioId] === a.choiceId) return s;
+      const guesses = { ...s.guesses };
+      delete guesses[a.scenarioId];
+      return { ...s, decisions: { ...s.decisions, [a.scenarioId]: a.choiceId }, guesses };
+    }
+    case 'guess':
+      return { ...s, guesses: { ...s.guesses, [a.scenarioId]: a.guess } };
     case 'undecide': {
       const d = { ...s.decisions };
       delete d[a.scenarioId];
-      return { ...s, decisions: d };
+      const guesses = { ...s.guesses };
+      delete guesses[a.scenarioId];
+      return { ...s, decisions: d, guesses };
     }
     case 'overrides':
       return { ...s, overrides: a.overrides };

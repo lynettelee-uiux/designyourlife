@@ -28,7 +28,7 @@ export default function Welcome() {
           <span className="block text-magenta-600">Try a few versions.</span>
         </h1>
         <p className="mt-5 max-w-md text-[17px] leading-relaxed text-ink-soft">
-          Pick the life you want, live through a few years of decisions, and see what it could take — in about 8 minutes.
+          Pick the life you want, practise the money decisions that come with it, and learn what moves you closer — in about 8 minutes.
         </p>
       </section>
 
@@ -37,8 +37,8 @@ export default function Welcome() {
       <HowItWorks
         steps={[
           { icon: 'Sparkles', title: 'Dream', text: 'Pick the life you want' },
-          { icon: 'Zap', title: 'Live it', text: 'Make real-life choices' },
-          { icon: 'Compass', title: 'See it', text: 'Change one thing' },
+          { icon: 'Zap', title: 'Practise', text: 'Guess, then decide' },
+          { icon: 'Lightbulb', title: 'Learn', text: 'See why — and what helps' },
         ]}
       />
 
@@ -61,6 +61,7 @@ export default function Welcome() {
       </a>
 
       <ul className="mt-10 space-y-3 text-sm text-ink-soft">
+        <li className="flex gap-3"><Icon name="Sparkles" className="mt-0.5 h-4 w-4 shrink-0" /> <span><strong className="text-ink">Not a calculator or budgeting app.</strong> A safe practice run for real Singapore money decisions — CPF, first pay, pay-later, scams — where you learn by deciding. Nothing to buy.</span></li>
         <li className="flex gap-3"><Icon name="Lock" className="mt-0.5 h-4 w-4 shrink-0" /> No sign-up, no NRIC, no bank details. Use a nickname and made-up numbers if you like.</li>
         <li className="flex gap-3"><Icon name="Lightbulb" className="mt-0.5 h-4 w-4 shrink-0" /> An educational simulation using 2026 Singapore rules — not a prediction or financial advice.</li>
         <li className="flex gap-3"><Icon name="Compass" className="mt-0.5 h-4 w-4 shrink-0" /> No right or wrong life. Just trade-offs you can explore.</li>

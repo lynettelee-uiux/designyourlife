@@ -12,6 +12,7 @@ import { CATEGORY_LABEL, type Category } from '../engine/types';
 import { compareChoice, useSimulation } from '../state/sim';
 import { useMemo } from 'react';
 import { DISTANCE } from '../components/Distance';
+import { LessonsRecap, guessAnswer } from '../components/Learning';
 import { FutureCard, ShareBar, SkillCard, dreamEmoji, verdictHeadline } from '../components/FutureCard';
 import { pickSkills } from '../lite/literacy';
 import { futureQuote, strengths } from '../lite/story';
@@ -58,7 +59,16 @@ export default function Outlook() {
   const strong = strengths({ goals, status: p.status, living: p.living, moments, habits, investMonthly: plan.investMonthly, dreamTitle: title });
   const near = goals.filter((g) => g.status === 'on_track').length;
   const cardGoals = [...goals].sort((a, b) => b.progress - a.progress).slice(0, 3);
+  const learned = chapters
+    .filter((c) => state.decisions[c.scenario.id])
+    .map((c) => {
+      const choice = c.scenario.choices.find((x) => x.id === state.decisions[c.scenario.id])!;
+      const g = state.guesses?.[c.scenario.id];
+      const m = moments.find((x) => x.scenario === c.scenario.id);
+      return { title: c.scenario.learn.title, lesson: choice.reflection, right: g ? g === guessAnswer(m?.impact ?? 0) : undefined };
+    });
   const card: CardData = {
+    lessons: learned.length,
     headline: verdictHeadline(near, goals.length),
     quote: futureQuote(cardGoals),
     strength: strong.find((t) => !t.includes('within reach')) ?? strong[0],
@@ -117,6 +127,8 @@ export default function Outlook() {
           ))}
         </ul>
       </section>
+
+      <LessonsRecap items={learned} />
 
       <section className="mt-8" aria-labelledby="skills-h">
         <h2 id="skills-h" className="display text-2xl">
