@@ -69,3 +69,6 @@ User feedback: people treated the experience like a quiz and skipped the "nugget
 
 ## Positioning
 Not a calculator (which answers one question) or a budgeting app (which tracks the past): a safe practice run for real Singapore money decisions, where you guess, decide and learn why — personalised to life stage, with nothing sold and nothing saved.
+
+### Quick-guess questions (revised)
+"Higher or lower savings?" was too obvious — spending always lowers savings. Each moment now has its own question about something genuinely non-obvious, answered with the simulation's own numbers: yearly package vs monthly pay (bonus offers), the total cost of a "free" phone plan, card interest on a trip (~$377 on $2,500 over a year at ~27%), CPF making a $1,200 internship worth about the same as $1,400 freelance, what compounding at "5% a week" would imply, the 25% rise needed after a 20% fall, lifetime pet cost, runway in months, and what pauses during a career break.

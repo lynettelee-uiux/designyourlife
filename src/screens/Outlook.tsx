@@ -12,7 +12,7 @@ import { CATEGORY_LABEL, type Category } from '../engine/types';
 import { compareChoice, useSimulation } from '../state/sim';
 import { useMemo } from 'react';
 import { DISTANCE } from '../components/Distance';
-import { LessonsRecap, guessAnswer } from '../components/Learning';
+import { LessonsRecap } from '../components/Learning';
 import { FutureCard, ShareBar, SkillCard, dreamEmoji, verdictHeadline } from '../components/FutureCard';
 import { pickSkills } from '../lite/literacy';
 import { futureQuote, strengths } from '../lite/story';
@@ -64,8 +64,7 @@ export default function Outlook() {
     .map((c) => {
       const choice = c.scenario.choices.find((x) => x.id === state.decisions[c.scenario.id])!;
       const g = state.guesses?.[c.scenario.id];
-      const m = moments.find((x) => x.scenario === c.scenario.id);
-      return { title: c.scenario.learn.title, lesson: choice.reflection, right: g ? g === guessAnswer(m?.impact ?? 0) : undefined };
+      return { title: c.scenario.learn.title, lesson: choice.reflection, right: g ? g === c.scenario.quiz?.(sim.ctx, c.age).answer : undefined };
     });
   const card: CardData = {
     lessons: learned.length,

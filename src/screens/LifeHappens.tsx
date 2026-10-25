@@ -20,6 +20,7 @@ export default function LifeHappens() {
   const choiceId = ch ? state.decisions[ch.scenario.id] : undefined;
   const choice = ch?.scenario.choices.find((c) => c.id === choiceId);
   const guess = ch ? state.guesses?.[ch.scenario.id] : undefined;
+  const quiz = ch?.scenario.quiz?.(ctx, ch.age);
   const allDone = chapters.every((c) => state.decisions[c.scenario.id]);
   const resultRef = useRef<HTMLDivElement>(null);
 
@@ -68,10 +69,10 @@ export default function LifeHappens() {
         </div>
       </Card>
 
-      {choice && cmp && !guess && <GuessPanel age={ch.age} onGuess={(g) => dispatch({ type: 'guess', scenarioId: s.id, guess: g })} />}
+      {choice && cmp && !guess && quiz && <GuessPanel quiz={quiz} onGuess={(g) => dispatch({ type: 'guess', scenarioId: s.id, guess: g })} />}
       {choice && cmp && guess && (
         <div ref={resultRef} className="mt-4 scroll-mt-28 space-y-3" aria-live="polite">
-          <LessonReveal guess={guess} impact={cmp.liquidNextAfter - cmp.liquidNextBefore} lesson={choice.reflection} title={s.learn.title} />
+          {quiz && <LessonReveal quiz={quiz} guess={guess} lesson={choice.reflection} title={s.learn.title} />}
           <Card className="rise">
             <p className="eyebrow">What happens</p>
             <p className="mt-1 text-[16px] leading-relaxed">{choice.outcome(ctx, ch.age)}</p>

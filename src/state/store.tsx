@@ -23,7 +23,7 @@ export interface AppState {
   habitEdits: Partial<HabitDefaults>;
   decisions: Record<string, string>;
   /** Quick guesses (higher / lower / same savings) made before each outcome is revealed. */
-  guesses: Record<string, 'up' | 'down' | 'same'>;
+  guesses: Record<string, string>;
   overrides: Overrides;
   saveLocally: boolean;
   furthest: number;
@@ -57,7 +57,7 @@ type Action =
   | { type: 'habitEdits'; edits: Partial<HabitDefaults> }
   | { type: 'decide'; scenarioId: string; choiceId: string }
   | { type: 'undecide'; scenarioId: string }
-  | { type: 'guess'; scenarioId: string; guess: 'up' | 'down' | 'same' }
+  | { type: 'guess'; scenarioId: string; guess: string }
   | { type: 'overrides'; overrides: Overrides }
   | { type: 'saveLocally'; value: boolean }
   | { type: 'reset' };

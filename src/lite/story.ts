@@ -54,7 +54,7 @@ export interface StrengthInputs {
 const CHOICE_STRENGTH: Record<string, string> = {
   'trip:save_first': 'You save up before you spend',
   'bnpl:repair': 'You ask “do I need new, or working?”',
-  'bnpl:save': 'You save up before big buys',
+  'bnpl:upfront': 'You pay upfront instead of borrowing',
   'job_scam:report': 'You spot red flags',
   'job_scam:ask': 'You check before you act',
   'grad_trip:budget': 'You get great experiences on a budget',

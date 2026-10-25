@@ -172,7 +172,7 @@ const DREAM_SKILL: Record<AspirationId, SkillId> = {
 
 /** Choices in the life moments that point to a skill, with the reason shown. */
 const CHOICE_SKILL: Record<string, [SkillId, string]> = {
-  'bnpl:card': ['credit', 'In your story you paid off a phone slowly on a card — interest made it cost more.'],
+  'bnpl:plan': ['credit', 'You took a “free” phone on a contract — the total cost ended up higher.'],
   'bnpl:bnpl': ['credit', 'You split a big buy with pay-later — easy to stack up.'],
   'grad_trip:japan_card': ['credit', 'You put a trip on a card to sort out later — interest adds up.'],
   'job_scam:try': ['scams', 'You paid a “deposit” to a job offer in your story — and lost it.'],

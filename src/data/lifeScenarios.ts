@@ -8,6 +8,8 @@ import { COST_DEFAULTS, DOWNTURN_DROP } from '../engine/assumptions';
 import { STATUS_INFO, lifeStage, type Dreams, type Habits, type LifeStage, type Profile } from '../engine/profile';
 import { resolveDream, type PlanEffect } from '../engine/plan';
 import type { Plan } from '../engine/types';
+import { monthlyCpf } from '../engine/cpf';
+import { balancesAtAge, monthlySnapshot, projectAll } from '../engine/projection';
 
 export interface ScenarioCtx {
   profile: Profile;
@@ -26,6 +28,14 @@ export interface ScenarioChoice {
   /** What happens straight away, in words. Numbers are added by the engine. */
   outcome: (ctx: ScenarioCtx, age: number) => string;
   reflection: string;
+}
+
+/** A "quick guess" asked after the choice and before the outcome — designed so the answer isn't obvious. */
+export interface Quiz {
+  question: string;
+  options: { id: string; label: string }[];
+  answer: string;
+  explain: string;
 }
 
 export interface LifeScenario {
@@ -47,6 +57,8 @@ export interface LifeScenario {
   neutral?: (ctx: ScenarioCtx, age: number) => PlanEffect[];
   /** Life stages this moment fits (used by Lite to keep scenarios age-appropriate). Omitted = any. */
   stages?: LifeStage[];
+  /** The quick-guess question for this moment (attached below from QUIZZES). */
+  quiz?: (ctx: ScenarioCtx, age: number) => Quiz;
 }
 
 const mainAge = (c: ScenarioCtx) => Math.max(c.profile.age, c.profile.mainIncomeAge);
@@ -60,42 +72,41 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
     id: 'first_offer',
     stages: ['student', 'ns', 'early_career'],
     topic: 'First job',
-    title: 'The offer letter',
+    title: 'Two offers',
     applies: isSalaried,
     age: mainAge,
-    story: (c, age) =>
-      `It's ${age > c.profile.age ? `${age - c.profile.age} year${age - c.profile.age > 1 ? 's' : ''} from now` : 'this month'}. ${c.name}, you've been offered a full-time role at ${fmt(c.profile.mainIncome)} a month. A second company offers ${fmt(c.profile.mainIncome * 0.9)} — less pay, but a structured training programme and a mentor.`,
+    story: (c) => {
+      const o = offers(c);
+      return `${c.name}, two job offers land in the same week. Offer A: ${fmt(o.a)} a month, plus a 2-month year-end bonus in the contract. Offer B: ${fmt(o.b)} a month, no bonus. Same kind of role.`;
+    },
     choices: [
       {
-        id: 'accept',
-        label: 'Accept the first offer as it is',
+        id: 'a',
+        label: 'Offer A — lower monthly pay, with a bonus',
+        effects: (c) => [{ kind: 'mainIncomeFactor', factor: (offers(c).a * 14) / 12 / c.profile.mainIncome }],
+        outcome: (c) => `You earn ${fmt(offers(c).a)} a month plus about two months’ bonus — around ${fmt(offers(c).a * 14)} a year. (We spread the bonus across the year in this illustration.)`,
+        reflection: 'Compare job offers by the yearly package, not the monthly figure. Bonuses also attract CPF — but check whether they’re guaranteed in the contract.',
+      },
+      {
+        id: 'b',
+        label: 'Offer B — higher monthly pay, no bonus',
         effects: () => [],
-        outcome: (c) => `You start at ${fmt(c.profile.mainIncome)} a month gross.`,
-        reflection: 'Your gross salary isn’t what lands in your bank account. CPF and tax come off first — but employer CPF is extra money set aside for you.',
+        outcome: (c) => `You earn ${fmt(offers(c).b)} a month — about ${fmt(offers(c).b * 12)} a year, steady and predictable.`,
+        reflection: 'A higher monthly number feels better, but the yearly total is what pays for your plans. Steady pay without a bonus does make budgeting simpler.',
       },
       {
         id: 'negotiate',
-        label: 'Negotiate politely, with evidence',
-        detail: 'You research typical pay for the role and ask for 5% more.',
+        label: 'Ask Offer B to come closer to A’s yearly total',
+        detail: 'You show both offers and ask politely.',
         effects: () => [{ kind: 'mainIncomeFactor', factor: 1.03 }],
-        outcome: (c) => `In this story, they meet you halfway: ${fmt(c.profile.mainIncome * 1.03)} a month (+3%). Real negotiations can go either way.`,
-        reflection: 'A small raise at the start compounds: future increments are often a percentage of your current pay, and CPF contributions rise with it.',
-      },
-      {
-        id: 'training',
-        label: 'Take the lower offer with training',
-        effects: (_c, age) => [
-          { kind: 'mainIncomeFactor', factor: 0.9 },
-          { kind: 'incomeAdjust', item: { id: 'training-payoff', fromAge: age + 3, factor: 1.15, label: 'Skills pay off (illustrative +15% from year 4)', source: 'first_offer' } },
-        ],
-        outcome: (c) => `You start at ${fmt(c.profile.mainIncome * 0.9)}. In this story, the skills lead to a 15% bigger role after three years — an illustration, not a guarantee.`,
-        reflection: 'Lower pay now can be worth it if it builds skills employers value. The trade-off is real either way — there’s no single right answer.',
+        outcome: (c) => `In this story, B meets you partway: ${fmt(offers(c).b * 1.03)} a month. Real negotiations can go either way.`,
+        reflection: 'Knowing the yearly value of each offer gives you a fair, evidence-based way to negotiate.',
       },
     ],
     learn: {
-      title: 'Gross vs take-home',
-      body: 'If you’re 55 or younger and earn over $750 a month, about 20% of your wage goes to your own CPF and your employer adds 17% on top (on wages up to $8,000 a month in 2026). CPF is split across your Ordinary, Special and MediSave accounts — it’s yours, but mostly locked for housing, healthcare and retirement.',
-      sourceIds: ['cpfConRate', 'cpfAlloc2026'],
+      title: 'Look at the yearly package',
+      body: 'Monthly pay, bonuses and CPF all add up to your real package. If you’re 55 or younger, 20% of your pay goes to your CPF and your employer adds 17% on top (on wages up to $8,000 a month in 2026).',
+      sourceIds: ['cpfConRate'],
     },
   },
 
@@ -574,44 +585,44 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
   {
     id: 'bnpl',
     topic: 'Spending',
-    title: 'Pay later?',
+    title: 'The new phone',
     stages: ['student', 'ns', 'early_career'],
     applies: () => true,
     age: (c) => c.profile.age,
-    story: () => `Your phone screen cracks — badly. A new one costs $1,200. At checkout, a banner pops up: “Pay in 3 — 0% interest!”`,
+    story: () => 'Your phone finally dies. The one you want costs $1,200. The shop offers three ways to get it — or you could repair the old one for about $250.',
     choices: [
       {
-        id: 'bnpl',
-        label: 'Split it into 3 with buy-now-pay-later',
-        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'bnpl', label: 'New phone (pay later)', age, amount: 1200, source: 'bnpl' } }],
-        outcome: () => 'Three payments of $400. No interest — as long as every payment is on time.',
-        reflection: 'Pay-later makes things feel cheaper than they are. One plan is manageable; several at once are easy to lose track of, and missed payments cost extra.',
+        id: 'upfront',
+        label: 'Pay $1,200 upfront from savings',
+        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'bnpl', label: 'New phone (paid upfront)', age, amount: 1200, source: 'bnpl' } }],
+        outcome: () => 'Done — no debt, but your savings drop by $1,200 straight away.',
+        reflection: 'Paying upfront is usually the cheapest way — as long as it doesn’t empty your emergency cushion.',
       },
       {
-        id: 'card',
-        label: 'Put it on a credit card and pay the minimum',
-        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'bnpl', label: 'New phone + card interest (illustrative)', age, amount: 1360, source: 'bnpl' } }],
-        outcome: () => 'You pay it off slowly over a year. At about 27% a year on the unpaid balance, the phone ends up costing around $1,360 (illustrative).',
-        reflection: 'Paying only the minimum means interest on everything else — and card interest is among the most expensive borrowing there is.',
+        id: 'bnpl',
+        label: 'Pay later: 3 × $400 at 0% interest',
+        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'bnpl', label: 'New phone (pay later)', age, amount: 1200, source: 'bnpl' } }],
+        outcome: () => 'Same $1,200 in total — if every payment is on time. Miss one and fees apply.',
+        reflection: 'Pay-later makes big buys feel smaller. One plan is manageable; several at once are easy to lose track of.',
+      },
+      {
+        id: 'plan',
+        label: 'Get it “free” on a 2-year mobile plan (~$60/month more)',
+        effects: (_c, age) => [{ kind: 'recurring', item: { id: 'bnpl-plan', label: 'Bundled phone plan (extra vs SIM-only, illustrative)', category: 'other', monthly: 60, fromAge: age, toAge: age + 2, nominal: true, source: 'bnpl' } }],
+        outcome: () => 'No upfront cost — but about $60 more every month for 2 years. That’s around $1,440 in total.',
+        reflection: '“Free” is rarely free. Spreading a cost inside a contract can make it more expensive — always compare the total.',
       },
       {
         id: 'repair',
-        label: 'Repair the screen instead (~$250)',
-        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'bnpl', label: 'Screen repair', age, amount: 250, source: 'bnpl' } }],
-        outcome: () => 'The repair costs about $250 and the phone works fine.',
+        label: 'Repair the old phone (~$250) and keep saving',
+        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'bnpl', label: 'Phone repair', age, amount: 250, source: 'bnpl' } }],
+        outcome: () => 'The repair costs about $250 and buys you time to save for the upgrade.',
         reflection: '“Do I need new, or do I need working?” is one of the most useful money questions there is.',
-      },
-      {
-        id: 'save',
-        label: 'Live with the crack and save up first',
-        effects: (_c, age) => [{ kind: 'oneOff', item: { id: 'bnpl', label: 'New phone (saved up)', age, amount: 1200, source: 'bnpl' } }],
-        outcome: () => 'A few months of saving later, you buy it outright. Same phone, no debt, no risk of fees.',
-        reflection: 'Saving first costs the same — but you’re never one missed payment away from extra fees.',
       },
     ],
     learn: {
-      title: 'Credit and buy-now-pay-later',
-      body: 'Credit cards in Singapore typically charge about 26–28% a year on unpaid balances. Pay-later providers follow an industry code of conduct developed under MAS guidance that caps fees — but late payments can still cost you.',
+      title: 'Compare the total cost',
+      body: 'Upfront, pay-later and bundled plans can cost very different amounts for the same thing. Credit cards typically charge about 26–28% a year on unpaid balances, and pay-later providers follow a code of conduct developed under MAS guidance that caps fees — but late payments still cost you.',
       sourceIds: ['creditCards', 'masBnpl'],
     },
   },
@@ -688,6 +699,173 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
     learn: { title: 'Your first CPF', body: 'Once you earn over $750 a month as an employee (aged 55 or below), 20% of your pay goes to your CPF and your employer adds 17% on top — even for internships.', sourceIds: ['cpfConRate'] },
   },
 ];
+
+// ---------- Quick-guess questions ----------
+// Each asks about something worth thinking about (yearly packages, interest, compounding, totals),
+// with answers computed from the same numbers the simulation uses.
+
+function offers(c: ScenarioCtx) {
+  const p = c.profile.mainIncome;
+  return { a: Math.round((p * 0.9) / 50) * 50, b: p };
+}
+
+const nice = (n: number) => {
+  const v = Math.abs(n);
+  const r = v >= 10000 ? Math.round(v / 1000) * 1000 : v >= 1000 ? Math.round(v / 100) * 100 : Math.round(v / 10) * 10;
+  return `~${fmt(r)}`;
+};
+
+/** Three options around a value; `pos` sets where the right answer sits so it isn't always in the middle. */
+function numQuiz(question: string, value: number, explain: string, pos: 0 | 1 | 2, spread: [number, number] = [0.3, 2.5]): Quiz {
+  const vals = [value * spread[0], value, value * spread[1]];
+  const labels = vals.map(nice);
+  const order = pos === 0 ? [1, 0, 2] : pos === 1 ? [0, 1, 2] : [0, 2, 1];
+  return { question, options: order.map((k) => ({ id: `o${k}`, label: labels[k] })), answer: 'o1', explain };
+}
+
+/** Extra paid when a balance is cleared in 12 equal monthly payments at ~27% a year (illustrative). */
+export function cardExtra(amount: number, apr = 0.27): number {
+  const r = apr / 12;
+  const pay = (amount * r) / (1 - Math.pow(1 + r, -12));
+  return pay * 12 - amount;
+}
+
+const QUIZZES: Record<string, (c: ScenarioCtx, age: number) => Quiz> = {
+  first_offer: (c) => {
+    const o = offers(c);
+    return {
+      question: 'Which offer pays more over a whole year?',
+      options: [
+        { id: 'b', label: `Offer B (${fmt(o.b)}/month)` },
+        { id: 'a', label: `Offer A (${fmt(o.a)}/month + bonus)` },
+        { id: 'same', label: 'About the same' },
+      ],
+      answer: o.a * 14 > o.b * 12 * 1.02 ? 'a' : o.b * 12 > o.a * 14 * 1.02 ? 'b' : 'same',
+      explain: `Offer A: ${fmt(o.a)} × 14 months = ${fmt(o.a * 14)}. Offer B: ${fmt(o.b)} × 12 = ${fmt(o.b * 12)}.`,
+    };
+  },
+  bnpl: () => ({
+    question: 'Over 2 years, which way of getting the new phone costs the most?',
+    options: [
+      { id: 'upfront', label: 'Paying upfront' },
+      { id: 'plan', label: 'The “free” phone plan' },
+      { id: 'bnpl', label: 'Pay later, on time' },
+    ],
+    answer: 'plan',
+    explain: 'Upfront: $1,200. Pay later on time: $1,200. “Free” phone: about $60 × 24 months = $1,440.',
+  }),
+  grad_trip: () => numQuiz('If the $2,500 Japan trip goes on a credit card and is paid off over a year at about 27% interest, roughly how much extra do you pay?', cardExtra(2500), `Twelve payments of about ${fmt((2500 + cardExtra(2500)) / 12)} = ${fmt(2500 + cardExtra(2500))} — about ${fmt(cardExtra(2500))} more than the trip itself.`, 1, [0.1, 3]),
+  trip: () => numQuiz('If the $2,500 trip goes on a credit card and is paid off over a year at about 27% interest, roughly how much extra do you pay?', cardExtra(2500), `Twelve payments of about ${fmt((2500 + cardExtra(2500)) / 12)} = ${fmt(2500 + cardExtra(2500))} — about ${fmt(cardExtra(2500))} more than the trip itself.`, 2, [0.1, 3]),
+  internship: (c, age) => {
+    const cpf = monthlyCpf(1200, age, c.basePlan.startYear + (age - c.profile.age));
+    const internTotal = 1200 - cpf.employee + cpf.total;
+    return {
+      question: 'Internship: $1,200 a month as an employee. Freelance: $1,400 a month, no CPF. Counting money that goes into your CPF too, which gives you more each month?',
+      options: [
+        { id: 'freelance', label: 'Freelance' },
+        { id: 'same', label: 'About the same' },
+        { id: 'intern', label: 'Internship' },
+      ],
+      answer: Math.abs(internTotal - 1400) <= 50 ? 'same' : internTotal > 1400 ? 'intern' : 'freelance',
+      explain: `Internship: ${fmt(1200 - cpf.employee)} take-home + ${fmt(cpf.total)} into your CPF (yours ${fmt(cpf.employee)} + employer ${fmt(cpf.employer)}) = ${fmt(internTotal)}. Freelance: $1,400, with no CPF.`,
+    };
+  },
+  job_scam: () => ({
+    question: 'Which of these is the biggest red flag in a job offer?',
+    options: [
+      { id: 'friendly', label: 'The recruiter is very friendly' },
+      { id: 'deposit', label: 'You must pay a deposit to start' },
+      { id: 'remote', label: 'The work is remote' },
+    ],
+    answer: 'deposit',
+    explain: 'Real employers pay you — they never ask you to pay to start work or “unlock” tasks.',
+  }),
+  scam: () => numQuiz('If “5% a week” were real, what would $500 grow to in one year?', 500 * Math.pow(1.05, 52), `$500 × 1.05 compounded 52 times ≈ ${fmt(500 * Math.pow(1.05, 52))}. No genuine investment does this — that’s the tell.`, 2, [0.15, 0.3]),
+  late_client: () => ({
+    question: 'What protects a freelancer most from this happening again?',
+    options: [
+      { id: 'faster', label: 'Working faster' },
+      { id: 'cheaper', label: 'Charging less' },
+      { id: 'deposit', label: 'A written scope and a deposit upfront' },
+    ],
+    answer: 'deposit',
+    explain: 'A clear written scope and a 30–50% deposit (a common practice) mean you’re never working entirely unpaid.',
+  }),
+  slow_month: () => ({
+    question: 'With irregular income, how many months of expenses does MoneySense suggest keeping as a cushion?',
+    options: [
+      { id: '3', label: 'About 3 months' },
+      { id: '6', label: 'About 6 months' },
+      { id: '12', label: 'About 12 months' },
+    ],
+    answer: '12',
+    explain: 'Around 12 months for irregular income, versus 3–6 months when income is steady.',
+  }),
+  laptop: () => numQuiz('You buy refurbished ($750) instead of new ($1,600) and invest the $850 difference. At an illustrative 4% a year, roughly what is it worth in 10 years?', 850 * Math.pow(1.04, 10), `$850 × 1.04¹⁰ ≈ ${fmt(850 * Math.pow(1.04, 10))} — illustrative, not guaranteed. Small savings grow when they’re left alone.`, 0, [0.75, 2.6]),
+  restructure: (c, age) => {
+    const proj = projectAll(c.basePlan).baseline;
+    const saved = Math.max(0, balancesAtAge(c.basePlan, proj, age).liquid);
+    const spend = monthlySnapshot(c.basePlan, age).spend;
+    const m = spend > 0 ? saved / spend : 0;
+    const label = (x: number) => (x < 1 ? 'Under a month' : `About ${Math.round(x)} month${Math.round(x) === 1 ? '' : 's'}`);
+    const vals = m < 1 ? [m, 3, 8] : [Math.max(0.5, m / 3), m, m * 3];
+    const right = m < 1 ? 0 : 1;
+    const opts = vals.map((v, k) => ({ id: `o${k}`, label: label(v) }));
+    return {
+      question: `With no salary, how long could your savings at ${age} cover your monthly costs?`,
+      options: [opts[1], opts[0], opts[2]],
+      answer: `o${right}`,
+      explain: `About ${fmt(saved)} in savings ÷ about ${fmt(spend)} of monthly costs ≈ ${m < 1 ? 'less than a month' : `${m.toFixed(1)} months`}. MoneySense suggests 3–6 months.`,
+    };
+  },
+  insurance: () => numQuiz('$250 a month in premiums for 25 years adds up to roughly…?', 250 * 12 * 25, '$250 × 12 months × 25 years = $75,000 — a big commitment to be sure about.', 2, [0.1, 0.4]),
+  family_help: () => ({
+    question: 'Besides cash, which of these can help pay a parent’s approved medical bills?',
+    options: [
+      { id: 'oa', label: 'Your CPF Ordinary Account' },
+      { id: 'ma', label: 'Your MediSave' },
+      { id: 'none', label: 'Nothing else' },
+    ],
+    answer: 'ma',
+    explain: 'MediSave can be used for approved medical bills of family members, subject to CPF rules. MediFund also helps lower-income patients.',
+  }),
+  downturn: () => ({
+    question: 'If your investments fall 20%, how much do they need to rise to get back to where they were?',
+    options: [
+      { id: '20', label: '20%' },
+      { id: '25', label: '25%' },
+      { id: '40', label: '40%' },
+    ],
+    answer: '25',
+    explain: '$100 falls to $80. Getting back to $100 needs +$20, which is 25% of $80.',
+  }),
+  move_out: (c, age) => {
+    const rent = rentOf(c) + COST_DEFAULTS.utilitiesWhenRenting;
+    let total = 0;
+    for (let k = 0; k < 3; k++) total += rent * 12 * Math.pow(1.02, k);
+    return numQuiz(`Rent and utilities of about ${fmt(rent)} a month from ${age}. Roughly how much is that over 3 years?`, total, `${fmt(rent)} × 36 months, rising about 2% a year ≈ ${fmt(total)}. Recurring costs add up fast.`, 0, [0.33, 2]);
+  },
+  pet: (c) => {
+    const d = resolveDream(c.dreams.pet ?? { id: 'pet' }, c.profile);
+    const cat = d.variant === 'cat';
+    const monthly = cat ? COST_DEFAULTS.catMonthly : COST_DEFAULTS.dogMonthly;
+    let total = cat ? COST_DEFAULTS.catSetup : COST_DEFAULTS.dogSetup;
+    for (let k = 0; k < 13; k++) total += monthly * 12 * Math.pow(1.02, k);
+    return numQuiz(`A ${cat ? 'cat' : 'dog'} at about ${fmt(monthly)} a month. Over about 13 years, roughly what does it cost in total?`, total, `Setup plus ${fmt(monthly)} a month for 13 years, rising with prices ≈ ${fmt(total)}.`, 1, [0.2, 3]);
+  },
+  career_break: () => ({
+    question: 'During a career break with no salary, what else stops?',
+    options: [
+      { id: 'cpf', label: 'Your CPF contributions' },
+      { id: 'tax', label: 'Your income tax for past years' },
+      { id: 'nothing', label: 'Nothing else' },
+    ],
+    answer: 'cpf',
+    explain: 'No salary means no employee or employer CPF contributions for those months — your retirement and housing savings pause too.',
+  }),
+};
+
+for (const s of LIFE_SCENARIOS) s.quiz = QUIZZES[s.id];
 
 function rentOf(c: ScenarioCtx) {
   return c.dreams.live_independently ? resolveDream(c.dreams.live_independently, c.profile).amount! : COST_DEFAULTS.roomRent;

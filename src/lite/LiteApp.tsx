@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActionBar, Button, Card, Icon, Segmented, Slider, cx } from '../components/ui';
 import { DISTANCE, DistanceBadge, DistanceBar } from '../components/Distance';
 import { LiteHero } from '../components/Hero';
-import { GuessPanel, LessonReveal, LessonsRecap, guessAnswer } from '../components/Learning';
+import { GuessPanel, LessonReveal, LessonsRecap } from '../components/Learning';
 import { FutureCard, ShareBar, SkillCard, dreamEmoji, verdictHeadline } from '../components/FutureCard';
 import { dreamOptions } from './dreamOptions';
 import { aspirationById } from '../data/aspirations';
@@ -442,6 +442,7 @@ function StepMoment({ input, set, result, index }: StepProps & { result: LiteRes
   const s = ch.scenario;
   const choice = s.choices.find((c) => c.id === decided);
   const guess = input.guesses?.[s.id];
+  const quiz = s.quiz?.(result.ctx, ch.age);
   return (
     <>
       <Intro eyebrow={`Life happens · moment ${index + 1} of ${result.chapters.length}`} title={s.title} />
@@ -477,8 +478,8 @@ function StepMoment({ input, set, result, index }: StepProps & { result: LiteRes
           ))}
         </div>
       </Card>
-      {choice && !guess && <GuessPanel age={ch.age} onGuess={(g) => set({ guesses: { ...(input.guesses ?? {}), [s.id]: g } })} />}
-      {choice && guess && <LessonReveal guess={guess} impact={impact} lesson={choice.reflection} title={s.learn.title} />}
+      {choice && !guess && quiz && <GuessPanel quiz={quiz} onGuess={(g) => set({ guesses: { ...(input.guesses ?? {}), [s.id]: g } })} />}
+      {choice && guess && quiz && <LessonReveal quiz={quiz} guess={guess} lesson={choice.reflection} title={s.learn.title} />}
       {choice && guess && (
         <Card className="pop mt-3" as="div" key={`${s.id}-${choice.id}`}>
           <p className="eyebrow">What happens</p>
@@ -516,8 +517,7 @@ function StepResults({ input, set, result, onRestart }: StepProps & { result: Li
     .map((c) => {
       const choice = c.scenario.choices.find((x) => x.id === input.decisions[c.scenario.id])!;
       const g = input.guesses?.[c.scenario.id];
-      const m = moments.find((x) => x.scenario === c.scenario.id);
-      return { title: c.scenario.learn.title, lesson: choice.reflection, right: g ? g === guessAnswer(m?.impact ?? 0) : undefined };
+      return { title: c.scenario.learn.title, lesson: choice.reflection, right: g ? g === c.scenario.quiz?.(result.ctx, c.age).answer : undefined };
     });
   const card: CardData = {
     lessons: learned.length,

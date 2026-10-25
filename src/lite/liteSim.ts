@@ -28,7 +28,7 @@ export interface LiteInput {
   dreams: Dreams;
   decisions: Record<string, string>;
   /** Quick guesses made before each outcome is revealed. */
-  guesses?: Record<string, 'up' | 'down' | 'same'>;
+  guesses?: Record<string, string>;
   overrides: Pick<Overrides, 'lifestyle' | 'investMonthly'>;
 }
 
