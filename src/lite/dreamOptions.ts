@@ -16,7 +16,8 @@ export interface DreamOptions {
 
 const uniq = (xs: number[]) => [...new Set(xs)].sort((a, b) => a - b);
 
-export function dreamOptions(id: AspirationId, age: number, stage: LifeStage): DreamOptions {
+/** `workAge` is when full-time work starts (students / NS); defaults to now. */
+export function dreamOptions(id: AspirationId, age: number, stage: LifeStage, workAge = age): DreamOptions {
   const ages = (candidates: number[], min: number, max = 64) => uniq(candidates.filter((x) => x >= min && x <= max)).slice(0, 4);
   const ageRow = (label: string, xs: number[]): DreamOptionRow => ({ key: 'age', label, options: xs.map((x) => ({ value: x, label: `${x}` })) });
   const soon = (label: string): DreamOptionRow => ({ key: 'age', label, options: [{ value: age, label: 'Now' }, { value: age + 2, label: 'In 2 years' }, { value: age + 5, label: 'In 5 years' }] });
@@ -61,6 +62,24 @@ export function dreamOptions(id: AspirationId, age: number, stage: LifeStage): D
         rows: [ageRow('Stop working at', xs), { key: 'amount', label: 'Lifestyle (today’s $)', options: [{ value: 1800, label: 'Simple $1.8k' }, { value: 3000, label: 'Comfy $3k' }, { value: 6000, label: 'Lavish $6k' }] }],
       };
     }
+    case 'support_parents': {
+      const from: DreamOptionRow =
+        workAge > age
+          ? { key: 'age', label: 'Start giving', options: [{ value: age, label: 'Now' }, { value: workAge, label: 'When I start work' }, { value: workAge + 2, label: '2 years into work' }] }
+          : soon('Start giving');
+      return {
+        defaults: { age: workAge, amount: 300 },
+        rows: [from, { key: 'amount', label: 'Each month, in total', options: [100, 300, 500].map((v) => ({ value: v, label: `$${v}` })) }],
+      };
+    }
+    case 'business':
+      return {
+        defaults: { age: age + 2, amount: 10000 },
+        rows: [
+          soon('Start'),
+          { key: 'amount', label: 'Starting with', options: [{ value: 2000, label: 'Side hustle ~$2k' }, { value: 10000, label: 'Small shop ~$10k' }, { value: 30000, label: 'Full business ~$30k' }] },
+        ],
+      };
     default:
       return { defaults: {}, rows: [] };
   }

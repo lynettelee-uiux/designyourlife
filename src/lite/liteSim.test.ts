@@ -73,3 +73,32 @@ describe('Lite simulation robustness', () => {
     expect(near({ lifestyle: 0 })).toBeGreaterThan(near({}));
   });
 });
+
+describe('the two newer dreams', () => {
+  it('a student who wants to give back gets the "giving back" moment when work starts, and each choice changes the outcome', () => {
+    const i = inp({ ...student23(), workStartYears: 1, dreams: { support_parents: { id: 'support_parents', age: 24, amount: 300 } } });
+    const r = liteSimulate(i);
+    const ch = r.chapters.find((c) => c.scenario.id === 'give_back');
+    expect(ch?.age).toBe(24);
+    const left = (choice: string) => monthlySnapshot(liteSimulate({ ...i, decisions: { give_back: choice } }).plan, 25).surplus;
+    expect(left('step')).toBeGreaterThan(left('planned'));
+  });
+
+  it('a side-hustle dream brings the launch moment, with testing small costing far less than going all in', () => {
+    const i = inp({ age: 24, status: 'employed', income: { salary: 1 }, savings: 2, dreams: { business: { id: 'business', age: 25, amount: 10000 } } });
+    expect(liteSimulate(i).chapters.map((c) => c.scenario.id)).toContain('launch');
+    const liquid = (choice: string) => {
+      const r = liteSimulate({ ...i, decisions: { launch: choice } });
+      return r.goals.find((g) => g.id === 'business')!.progress ?? 0;
+    };
+    expect(LITE_DREAMS).toEqual(expect.arrayContaining(['business', 'support_parents']));
+    expect(liquid('test')).toBeGreaterThanOrEqual(liquid('all_in'));
+  });
+
+  it('the give-back amount replaces what is given today rather than adding to it', () => {
+    const i = inp({ age: 24, status: 'employed', income: { salary: 1 }, giving: 1, dreams: { support_parents: { id: 'support_parents', age: 26, amount: 500 } } });
+    const fam = (age: number) => liteSimulate(i).plan.recurring.filter((r) => r.category === 'family' && age >= r.fromAge && (r.toAge === undefined || age < r.toAge)).reduce((x, r) => x + r.monthly, 0);
+    expect(fam(25)).toBe(200);
+    expect(fam(27)).toBe(500);
+  });
+});

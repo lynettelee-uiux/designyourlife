@@ -72,3 +72,10 @@ Not a calculator (which answers one question) or a budgeting app (which tracks t
 
 ### Quick-guess questions (revised)
 "Higher or lower savings?" was too obvious — spending always lowers savings. Each moment now has its own question about something genuinely non-obvious, answered with the simulation's own numbers: yearly package vs monthly pay (bonus offers), the total cost of a "free" phone plan, card interest on a trip (~$377 on $2,500 over a year at ~27%), CPF making a $1,200 internship worth about the same as $1,400 freelance, what compounding at "5% a week" would imply, the 25% rise needed after a 20% fall, lifetime pet cost, runway in months, and what pauses during a career break.
+
+### Dreams: two added to Lite (8 in total)
+Gap review of the original six (travel, own place, pet, career break, home, retire early): all were about *spending on yourself*. Two very common goals for Singapore youths were missing: **giving back to parents** (a regular allowance at home is a strong norm, and often starts with the first pay) and **starting my own thing** (side hustles and small online shops). Both already existed in the full version; Lite now offers them with one-tap choices (when; how much), and both versions get a dream-linked life moment:
+- **Giving back at home** — give the full amount, step up as pay grows, or build a 3-month cushion first. Quick guess: can giving cash to parents lower your own tax? (Yes — IRAS Parent Relief, conditions apply; CPF cash top-ups to loved ones can add up to $8,000 of relief.)
+- **Launch day** — go all in, test small first, or save two more years. Quick guess: break-even units ($600 fixed ÷ $12 margin = 50; the trap is dividing by the price).
+
+Considered but not added: wedding/BTO with a partner (strongly relevant from 25+, but needs couple-level modelling), a car (COE makes it a powerful lesson but prices are volatile), and further studies (fees vary widely by course).

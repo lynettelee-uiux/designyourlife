@@ -162,9 +162,16 @@ export function buildPlan(inp: PlanInputs): Plan {
       case 'business':
         oneOffs.push({ id: 'business-capital', label: 'Business starting capital', age: d.age!, amount: d.amount!, source: 'dream' });
         break;
-      case 'support_parents':
+      case 'support_parents': {
+        // The dream amount is the total given from then on, so it replaces any allowance given today (no double count).
+        const now = recurring.findIndex((r) => r.id === 'family-allowance');
+        if (now >= 0) {
+          if (d.age! <= a) recurring.splice(now, 1);
+          else recurring[now] = { ...recurring[now], toAge: d.age! };
+        }
         recurring.push({ id: 'parents-support', label: 'Supporting parents', category: 'family', monthly: d.amount!, fromAge: d.age!, source: 'dream' });
         break;
+      }
       case 'creative_career':
         incomeAdjustments.push({ id: 'creative', fromAge: d.age!, factor: 0.8, label: 'Creative career (illustrative 20% lower, less predictable income)', source: 'dream' });
         break;

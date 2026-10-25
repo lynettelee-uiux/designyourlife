@@ -698,6 +698,99 @@ export const LIFE_SCENARIOS: LifeScenario[] = [
     ],
     learn: { title: 'Your first CPF', body: 'Once you earn over $750 a month as an employee (aged 55 or below), 20% of your pay goes to your CPF and your employer adds 17% on top — even for internships.', sourceIds: ['cpfConRate'] },
   },
+
+  // 12 — Dream: give back to parents
+  {
+    id: 'give_back',
+    topic: 'Family',
+    title: 'Giving back at home',
+    neutral: () => [{ kind: 'removeRecurring', id: 'parents-support' }],
+    applies: (c) => !!c.dreams.support_parents,
+    age: (c) => resolveDream(c.dreams.support_parents!, c.profile).age!,
+    story: (c, age) => {
+      const d = resolveDream(c.dreams.support_parents!, c.profile);
+      return `You’re ${age}. ${c.name}, you’ve always planned to give your parents ${fmt(d.amount!)} a month. When you bring it up, they say, “No need — keep it for yourself.” You know things are a bit tight at home.`;
+    },
+    choices: [
+      {
+        id: 'planned',
+        label: 'Give the full amount from now',
+        effects: (c, age) => [{ kind: 'recurring', item: { id: 'parents-support', label: 'Supporting parents', category: 'family', monthly: resolveDream(c.dreams.support_parents!, c.profile).amount!, fromAge: age, source: 'give_back' } }],
+        outcome: (c) => `You set up ${fmt(resolveDream(c.dreams.support_parents!, c.profile).amount!)} a month on payday. It’s now one of your fixed costs, alongside everything else.`,
+        reflection: 'Giving regularly is a commitment like rent: plan it in, and the rest of your budget fits around it.',
+      },
+      {
+        id: 'step',
+        label: 'Start at half, step up as my pay grows',
+        effects: (c, age) => {
+          const amt = resolveDream(c.dreams.support_parents!, c.profile).amount!;
+          return [
+            { kind: 'recurring', item: { id: 'parents-support', label: 'Supporting parents (starting amount)', category: 'family', monthly: Math.round(amt / 2), fromAge: age, toAge: age + 3, source: 'give_back' } },
+            { kind: 'recurring', item: { id: 'parents-support-later', label: 'Supporting parents', category: 'family', monthly: amt, fromAge: age + 3, source: 'give_back' } },
+          ];
+        },
+        outcome: (c) => `You give ${fmt(resolveDream(c.dreams.support_parents!, c.profile).amount! / 2)} a month for the first 3 years, then the full amount.`,
+        reflection: 'Starting smaller and stepping up keeps giving sustainable while your own cushion is still thin.',
+      },
+      {
+        id: 'cushion',
+        label: 'Build a 3-month cushion first, start next year',
+        effects: (_c, age) => [{ kind: 'shiftRecurring', id: 'parents-support', fromAge: age + 1 }],
+        outcome: () => 'You save hard for a year, then start giving with a safety net behind you.',
+        reflection: 'A cushion means a surprise bill never forces you to stop helping at home.',
+      },
+    ],
+    learn: {
+      title: 'Plan giving like any big goal',
+      body: 'Supporting parents may also lower your own income tax once you pay tax: IRAS Parent Relief (conditions apply, such as your parent being 55+ with a low income), and CPF cash top-ups to a parent’s account can qualify for up to $8,000 of relief a year.',
+      sourceIds: ['irasParentRelief', 'cpfTopUpRelief'],
+    },
+  },
+
+  // 13 — Dream: start my own thing
+  {
+    id: 'launch',
+    topic: 'Business',
+    title: 'Launch day',
+    neutral: () => [{ kind: 'removeRecurring', id: 'business' }],
+    applies: (c) => !!c.dreams.business,
+    age: (c) => resolveDream(c.dreams.business!, c.profile).age!,
+    story: (c, age) => {
+      const d = resolveDream(c.dreams.business!, c.profile);
+      return `You’re ${age}. ${c.name}, your idea — a small online shop — is ready to go. Doing it properly needs about ${fmt(d.amount!)} for stock, a website and marketing. Friends say they’d buy. How do you start?`;
+    },
+    choices: [
+      {
+        id: 'all_in',
+        label: 'Go all in: put in the full amount and go full-time',
+        effects: (c, age) => [
+          { kind: 'oneOff', item: { id: 'business-capital', label: 'Business starting capital', age, amount: resolveDream(c.dreams.business!, c.profile).amount!, source: 'launch' } },
+          { kind: 'incomeGap', item: { id: 'business-ramp', age, months: 6, partialFactor: 0.3, label: 'First 6 months of the business', source: 'launch' } },
+        ],
+        outcome: (c) => `You put in ${fmt(resolveDream(c.dreams.business!, c.profile).amount!)}. For the first 6 months the shop pays you about 30% of what a job would (illustrative).`,
+        reflection: 'Most new businesses take time to pay their founder. Your personal buffer decides how long you can keep going.',
+      },
+      {
+        id: 'test',
+        label: 'Test it small first, alongside work or school',
+        effects: (c, age) => [{ kind: 'oneOff', item: { id: 'business-capital', label: 'Testing the business idea', age, amount: Math.max(500, Math.round(resolveDream(c.dreams.business!, c.profile).amount! / 10 / 100) * 100), source: 'launch' } }],
+        outcome: (c) => `You spend about ${fmt(Math.max(500, Math.round(resolveDream(c.dreams.business!, c.profile).amount! / 10 / 100) * 100))} on a small first batch to see if strangers — not just friends — will pay.`,
+        reflection: 'Testing with a small amount tells you if there’s real demand before you risk the full amount.',
+      },
+      {
+        id: 'later',
+        label: 'Save for two more years, then launch',
+        effects: (c, age) => [{ kind: 'oneOff', item: { id: 'business-capital', label: 'Business starting capital', age: age + 2, amount: resolveDream(c.dreams.business!, c.profile).amount!, source: 'launch' } }],
+        outcome: () => 'You keep your income for now and launch in two years with a bigger cushion.',
+        reflection: 'Waiting costs time, but a bigger buffer gives the business more room to find its feet.',
+      },
+    ],
+    learn: {
+      title: 'Know your break-even',
+      body: 'Each sale only helps after its own costs are paid. Knowing how many sales cover your fixed costs — and keeping 3–6 months of personal expenses aside — lets you try without risking everything.',
+      sourceIds: ['moneysenseEF'],
+    },
+  },
 ];
 
 // ---------- Quick-guess questions ----------
@@ -863,6 +956,26 @@ const QUIZZES: Record<string, (c: ScenarioCtx, age: number) => Quiz> = {
     answer: 'cpf',
     explain: 'No salary means no employee or employer CPF contributions for those months — your retirement and housing savings pause too.',
   }),
+  give_back: () => ({
+    question: 'Your parents are 55+, earn very little, and live in their own flat. You give them $200 a month in cash. Can that lower your own income tax?',
+    options: [
+      { id: 'no', label: 'No — only CPF top-ups count' },
+      { id: 'together', label: 'Only if they live with you' },
+      { id: 'yes', label: 'Yes — through Parent Relief' },
+    ],
+    answer: 'yes',
+    explain: '$200 × 12 = $2,400 a year, above the $2,000 of support IRAS asks for when a parent lives elsewhere — so you may claim Parent Relief ($5,500 per parent; $9,000 if they live with you). CPF cash top-ups to their account can add up to $8,000 more. Conditions apply, and relief only helps once you pay tax.',
+  }),
+  launch: () => ({
+    question: 'You sell each item for $30. Making and delivering it costs $18, and the platform and booth cost $600 a month. How many must you sell each month just to break even?',
+    options: [
+      { id: '20', label: '20' },
+      { id: '33', label: '33' },
+      { id: '50', label: '50' },
+    ],
+    answer: '50',
+    explain: 'Each sale leaves only $30 − $18 = $12 towards fixed costs. $600 ÷ $12 = 50. Dividing by the price ($600 ÷ $30 = 20) is the common trap. Figures are illustrative.',
+  }),
 };
 
 for (const s of LIFE_SCENARIOS) s.quiz = QUIZZES[s.id];
@@ -888,8 +1001,8 @@ export function selectScenarios(ctx: ScenarioCtx): { scenario: LifeScenario; age
   const byId = (id: string) => LIFE_SCENARIOS.find((s) => s.id === id)!;
   // Dream-linked chapters follow the user's own timing; everything else is matched to their current life stage.
   const stage = lifeStage(ctx.profile);
-  const dreamLinked = ['move_out', 'pet', 'career_break'];
-  const priority = ['first_offer', 'slow_month', 'move_out', 'pet', 'career_break', 'restructure', 'late_client', 'laptop', 'grad_trip', 'bnpl', 'downturn', 'family_help', 'internship', 'job_scam', 'trip', 'insurance', 'scam'];
+  const dreamLinked = ['move_out', 'pet', 'career_break', 'give_back', 'launch'];
+  const priority = ['first_offer', 'slow_month', 'move_out', 'give_back', 'launch', 'pet', 'career_break', 'restructure', 'late_client', 'laptop', 'grad_trip', 'bnpl', 'downturn', 'family_help', 'internship', 'job_scam', 'trip', 'insurance', 'scam'];
   const chosen: LifeScenario[] = [];
   let unexpected = false;
   for (const id of priority) {

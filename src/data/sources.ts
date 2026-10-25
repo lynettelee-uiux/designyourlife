@@ -114,6 +114,22 @@ export const SOURCES: Record<string, Source> = {
     accessed: ACCESSED,
     official: true,
   },
+  irasParentRelief: {
+    id: 'irasParentRelief',
+    title: 'Parent Relief / Parent Relief (Disability)',
+    publisher: 'IRAS',
+    url: 'https://www.iras.gov.sg/taxes/individual-income-tax/basics-of-individual-income-tax/tax-reliefs-rebates-and-deductions/tax-reliefs/parent-relief-parent-relief-(disability)',
+    accessed: '2026-10-25',
+    official: true,
+  },
+  cpfTopUpRelief: {
+    id: 'cpfTopUpRelief',
+    title: 'CPF Cash Top-up Relief (up to $8,000 a year for topping up loved ones)',
+    publisher: 'IRAS / CPF Board',
+    url: 'https://www.iras.gov.sg/taxes/individual-income-tax/basics-of-individual-income-tax/tax-reliefs-rebates-and-deductions/tax-reliefs/central-provident-fund-(cpf)-cash-top-up-relief',
+    accessed: '2026-10-25',
+    official: true,
+  },
   moneysenseEF: {
     id: 'moneysenseEF',
     title: 'MoneySense — Basic Financial Planning Guide (emergency fund 3–6 months; 12 months if income is irregular)',

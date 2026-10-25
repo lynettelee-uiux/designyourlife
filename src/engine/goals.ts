@@ -185,7 +185,7 @@ function evaluateOne(id: AspirationId, plan: Plan, proj: Projection, profile: Pr
     }
     case 'support_parents': {
       const cf = cashflowStatus(plan, proj, d.age!);
-      const total = plan.recurring.filter((r) => r.category === 'family').reduce((x, r) => x + (r.fromAge <= d.age! ? r.monthly : 0), 0);
+      const total = plan.recurring.filter((r) => r.category === 'family').reduce((x, r) => x + (r.fromAge <= d.age! && (r.toAge === undefined || r.toAge > d.age!) ? r.monthly : 0), 0);
       return {
         id,
         status: cf.status,

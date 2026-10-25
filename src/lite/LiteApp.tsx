@@ -296,7 +296,7 @@ function StepDreams({ input, set, result, picked }: StepProps & { result: LiteRe
   const toggle = (id: AspirationId) => {
     const d: Dreams = { ...input.dreams };
     if (d[id]) delete d[id];
-    else if (picked < MAX_DREAMS) d[id] = { id, ...dreamOptions(id, input.age, lifeStage(input)).defaults };
+    else if (picked < MAX_DREAMS) d[id] = { id, ...dreamOptions(id, input.age, lifeStage(input), input.age + (input.workStartYears ?? 0)).defaults };
     set({ dreams: d, decisions: {} });
   };
   return (
@@ -343,7 +343,7 @@ function StepDreams({ input, set, result, picked }: StepProps & { result: LiteRe
       {picked > 0 && (
         <section className="mt-4 space-y-2.5" aria-label="Make your dreams yours">
           {LITE_DREAMS.filter((id) => input.dreams[id] && !dreamAlreadyMet(id, input.living)).map((id) => {
-            const opts = dreamOptions(id, input.age, lifeStage(input));
+            const opts = dreamOptions(id, input.age, lifeStage(input), input.age + (input.workStartYears ?? 0));
             const d = input.dreams[id]!;
             const g = result.goals.find((x) => x.id === id);
             return (

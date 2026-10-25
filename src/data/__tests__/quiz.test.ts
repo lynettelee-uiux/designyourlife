@@ -48,3 +48,11 @@ describe('quick-guess questions', () => {
     for (const ch of r.chapters) expect(ch.scenario.quiz!(r.ctx, ch.age).question.length).toBeGreaterThan(20);
   });
 });
+
+describe('newer dream moments', () => {
+  it('break-even quiz answer is 50, not the price trap', () => {
+    const q = LIFE_SCENARIOS.find((s) => s.id === 'launch')!.quiz!(ctxFor('employed'), 25);
+    expect(q.answer).toBe('50');
+    expect(30 - 18).toBe(600 / 50);
+  });
+});

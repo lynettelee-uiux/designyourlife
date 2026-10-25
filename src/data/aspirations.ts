@@ -107,20 +107,20 @@ export const ASPIRATIONS: AspirationDef[] = [
   },
   {
     id: 'support_parents',
-    title: 'Support my parents',
-    blurb: 'Give back at home',
+    title: 'Give back to my parents',
+    blurb: 'A regular amount at home',
     icon: 'HeartHandshake',
     tint: 'bg-navy-50',
     params: [
-      { key: 'amount', label: 'Monthly support', min: 50, max: 2000, step: 50, prefix: '$' },
+      { key: 'amount', label: 'Monthly support (in total)', min: 50, max: 2000, step: 50, prefix: '$' },
       { key: 'age', label: 'From age', min: 18, max: 45, step: 1 },
     ],
     vision: (p) => `giving my parents $${p.amount}/month`,
   },
   {
     id: 'business',
-    title: 'Start a business',
-    blurb: 'Build something of my own',
+    title: 'Start my own thing',
+    blurb: 'A side hustle or business',
     icon: 'Rocket',
     tint: 'bg-magenta-50',
     params: [

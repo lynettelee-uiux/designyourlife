@@ -11,7 +11,7 @@ import type { Plan } from '../engine/types';
 import { LIFE_SCENARIOS, type LifeScenario, type ScenarioCtx } from '../data/lifeScenarios';
 import { GIVING_BANDS, INCOME_SOURCES, SAVINGS_BANDS, basicsFor, lifestyleFrom, type IncomeSource, type LiteHabits } from './inputs';
 
-export const LITE_DREAMS: AspirationId[] = ['travel', 'live_independently', 'pet', 'career_break', 'own_home', 'retire_early'];
+export const LITE_DREAMS: AspirationId[] = ['travel', 'live_independently', 'pet', 'support_parents', 'business', 'career_break', 'own_home', 'retire_early'];
 export const MAX_DREAMS = 3;
 
 export interface LiteInput {
@@ -114,7 +114,7 @@ export interface LiteResult {
   chapters: { scenario: LifeScenario; age: number }[];
 }
 
-const SCENARIO_DREAM: Record<string, AspirationId> = { pet: 'pet', move_out: 'live_independently', career_break: 'career_break' };
+const SCENARIO_DREAM: Record<string, AspirationId> = { pet: 'pet', move_out: 'live_independently', career_break: 'career_break', give_back: 'support_parents', launch: 'business' };
 
 /** Everyday moments by stage, most relevant first. */
 const EVERYDAY: Record<LifeStage, string[]> = {
@@ -137,7 +137,7 @@ export function liteChapters(ctx: ScenarioCtx, habits: LiteHabits): { scenario: 
   const picked: LifeScenario[] = [];
 
   // A dream-linked moment only if it happens soon (within 3 years) — keeps the story about "you, now".
-  for (const id of ['move_out', 'pet', 'career_break']) {
+  for (const id of ['move_out', 'give_back', 'launch', 'pet', 'career_break']) {
     const s = find(id);
     if (s && SCENARIO_DREAM[id] in ctx.dreams && ageOf(s) <= ctx.profile.age + 3) {
       picked.push(s);

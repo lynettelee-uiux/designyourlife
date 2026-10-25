@@ -182,6 +182,8 @@ const CHOICE_SKILL: Record<string, [SkillId, string]> = {
   'pet:adopt': ['budgeting', 'Your pet adds a monthly cost for 10–15 years.'],
   'move_out:move': ['budgeting', 'Rent is now your biggest monthly cost.'],
   'career_break:full': ['emergency', 'A full break runs on savings alone.'],
+  'launch:all_in': ['emergency', 'You went all in on a business — your savings carried the slow first months.'],
+  'give_back:planned': ['budgeting', 'Giving at home is now a fixed monthly cost to plan around.'],
 };
 const SURPRISE_SKILL: Record<string, SkillId> = { restructure: 'emergency', laptop: 'emergency', slow_month: 'irregular' };
 
