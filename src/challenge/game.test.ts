@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { QUESTIONS } from './questions';
 import { SOURCES } from '../data/sources';
-import { AREAS, AREA_ORDER, relevance, stageOf, type Area, type Player } from './areas';
-import { MAX_HEARTS, addStats, diagnose, forToday, levelOf, newProgress, nextTier, pickQuestion, pointsFor, questionsFor, startTier, type Focus } from './game';
+import { AREAS, AREA_ORDER, GROUPS, groupRelevance, relevance, stageOf, type Area, type Player } from './areas';
+import { ageBand, leaderboard, peerAverage } from './peers';
+import { MAX_HEARTS, addStats, diagnose, forToday, groupScores, levelOf, newProgress, nextTier, pickQuestion, pointsFor, questionsFor, startTier, type Focus } from './game';
 
 const mixed = (p: Player): Focus => ({ kind: 'mixed', stage: stageOf(p), weights: relevance(p) });
 const student: Player = { age: 20, situation: 'studying' };
@@ -90,16 +91,62 @@ describe('life stage', () => {
     expect(avg(core)).toBeGreaterThan(avg(good) * 1.5);
   });
 
-  it('topic rounds only ask that topic, and end when it runs out', () => {
-    const focus: Focus = { kind: 'topic', area: 'legacy' };
+  it('topic rounds ask only that key area (both of its skills), and end when it runs out', () => {
+    const focus: Focus = { kind: 'topic', group: 'future' };
     const asked = new Set<string>();
+    const seen = new Set<Area>();
     for (;;) {
       const q = pickQuestion(QUESTIONS, 1, asked, {}, focus);
       if (!q) break;
-      expect(q.area).toBe('legacy');
+      expect(['retirement', 'legacy']).toContain(q.area);
+      seen.add(q.area);
       asked.add(q.id);
     }
-    expect(asked.size).toBe(QUESTIONS.filter((q) => q.area === 'legacy').length);
+    expect(seen.size).toBe(2);
+    expect(asked.size).toBe(QUESTIONS.filter((q) => q.area === 'retirement' || q.area === 'legacy').length);
+  });
+});
+
+describe('key areas and demo comparisons', () => {
+  it('six key areas cover all twelve skills exactly once', () => {
+    const all = GROUPS.flatMap((g) => g.areas);
+    expect(GROUPS).toHaveLength(6);
+    expect(new Set(all).size).toBe(12);
+    expect([...all].sort()).toEqual([...AREA_ORDER].sort());
+  });
+
+  it('a key area is as relevant as its most relevant skill', () => {
+    const future = GROUPS.find((g) => g.id === 'future')!;
+    expect(groupRelevance(student, future)).toBe(1);
+    expect(groupRelevance(worker31, future)).toBe(2);
+  });
+
+  it('group scores add up their skills', () => {
+    const s = groupScores({ retirement: { right: 1, seen: 2 }, legacy: { right: 2, seen: 2 } });
+    expect(s.future).toEqual({ right: 3, seen: 4, share: 0.75 });
+    expect(s.credit.share).toBeUndefined();
+  });
+
+  it('demo peer averages are stable, plausible, and higher where a skill is core', () => {
+    const a = peerAverage(worker31);
+    expect(peerAverage(worker31)).toEqual(a);
+    for (const v of Object.values(a)) {
+      expect(v).toBeGreaterThan(0.3);
+      expect(v).toBeLessThan(0.8);
+    }
+    expect(peerAverage(worker31).future).toBeGreaterThan(peerAverage(student).future);
+    expect(ageBand(23).label).toBe('21–24');
+  });
+
+  it('demo leaderboard: stable for the week, ranks you by your best, never lists you with 0', () => {
+    const now = new Date(2026, 9, 25);
+    const board = leaderboard(worker24, 0, now);
+    expect(board).toHaveLength(9);
+    expect(board.some((r) => r.you)).toBe(false);
+    expect(leaderboard(worker24, 0, now)).toEqual(board);
+    const withMe = leaderboard(worker24, 99, now);
+    expect(withMe[0]).toMatchObject({ you: true, rank: 1 });
+    for (let i = 1; i < withMe.length; i++) expect(withMe[i].best).toBeLessThanOrEqual(withMe[i - 1].best);
   });
 });
 

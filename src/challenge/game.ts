@@ -3,7 +3,7 @@
 // topic), and a diagnosis of weak money skills.
 // Pure functions only, so the rules are testable; the UI owns timers and storage.
 
-import type { Area, Player, Relevance, Stage } from './areas';
+import { GROUPS, groupById, type Area, type GroupId, type Player, type Relevance, type Stage } from './areas';
 import type { Question, Tier } from './questions';
 
 export const MAX_HEARTS = 5;
@@ -90,11 +90,14 @@ export function nextTier(tier: Tier, right: boolean, streak: number): Tier {
   return tier;
 }
 
-/** What a round draws from: everything relevant to your stage (weighted), or a single topic. */
-export type Focus = { kind: 'mixed'; stage: Stage; weights: Record<Area, Relevance> } | { kind: 'topic'; area: Area };
+/** What a round draws from: everything relevant to your stage (weighted), or one key area. */
+export type Focus = { kind: 'mixed'; stage: Stage; weights: Record<Area, Relevance> } | { kind: 'topic'; group: GroupId };
 
 export function questionsFor(bank: Question[], focus: Focus): Question[] {
-  if (focus.kind === 'topic') return bank.filter((q) => q.area === focus.area);
+  if (focus.kind === 'topic') {
+    const areas = groupById(focus.group).areas as Area[];
+    return bank.filter((q) => areas.includes(q.area));
+  }
   return bank.filter((q) => focus.weights[q.area] > 0 && (!q.stages || q.stages.includes(focus.stage)));
 }
 
@@ -150,4 +153,15 @@ export function diagnose(stats: Progress['stats']) {
   const weak = rows.filter((r) => r.right < r.seen).sort((a, b) => a.share - b.share || b.seen - b.right - (a.seen - a.right));
   const strong = rows.filter((r) => r.seen >= 2 && r.share >= 0.8).sort((a, b) => b.share - a.share || b.seen - a.seen);
   return { rows: rows.sort((a, b) => a.share - b.share), weak, strong };
+}
+
+/** Share right per key area (undefined if not tried yet). */
+export function groupScores(stats: Progress['stats']): Record<GroupId, { right: number; seen: number; share?: number }> {
+  return Object.fromEntries(
+    GROUPS.map((g) => {
+      const right = g.areas.reduce((x, a) => x + (stats[a]?.right ?? 0), 0);
+      const seen = g.areas.reduce((x, a) => x + (stats[a]?.seen ?? 0), 0);
+      return [g.id, { right, seen, share: seen ? right / seen : undefined }];
+    }),
+  ) as Record<GroupId, { right: number; seen: number; share?: number }>;
 }

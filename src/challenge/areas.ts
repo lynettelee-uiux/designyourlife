@@ -149,3 +149,32 @@ export function relevance(p: Player): Record<Area, Relevance> {
 
 /** Where "what to know at your stage" sits on the spider diagram. */
 export const TARGET: Record<Relevance, number> = { 2: 1, 1: 0.6, 0: 0.2 };
+
+// ---------- Key areas: the 12 skills grouped into 6 for the map and topic rounds ----------
+
+export type GroupId = 'everyday' | 'safety' | 'credit' | 'earning' | 'growing' | 'future';
+
+export interface Group {
+  id: GroupId;
+  title: string;
+  /** Spoke label on the spider diagram. */
+  axis: string;
+  icon: string;
+  blurb: string;
+  areas: [Area, Area];
+}
+
+export const GROUPS: Group[] = [
+  { id: 'everyday', title: 'Spending & saving', axis: 'Spending & saving', icon: 'PiggyBank', blurb: 'Budgets, saving first, goals', areas: ['budgeting', 'saving'] },
+  { id: 'safety', title: 'Safety nets', axis: 'Safety nets', icon: 'Umbrella', blurb: 'Emergency fund, insurance', areas: ['emergency', 'protection'] },
+  { id: 'credit', title: 'Credit & scams', axis: 'Credit & scams', icon: 'ShieldCheck', blurb: 'Cards, pay-later, red flags', areas: ['credit', 'scams'] },
+  { id: 'earning', title: 'Pay, CPF & gig income', axis: 'Pay & CPF', icon: 'Wallet', blurb: 'Payslips, tax, freelancing', areas: ['payslip', 'irregular'] },
+  { id: 'growing', title: 'Investing & home', axis: 'Investing & home', icon: 'TrendingUp', blurb: 'Risk, growth, HDB & CPF', areas: ['investing', 'housing'] },
+  { id: 'future', title: 'Retirement & legacy', axis: 'Retirement & legacy', icon: 'Sunset', blurb: 'CPF LIFE, wills, nominations', areas: ['retirement', 'legacy'] },
+];
+
+export const groupOf = (a: Area): Group => GROUPS.find((g) => g.areas.includes(a))!;
+export const groupById = (id: GroupId): Group => GROUPS.find((g) => g.id === id)!;
+
+/** A key area is as relevant as its most relevant skill. */
+export const groupRelevance = (p: Player, g: Group): Relevance => Math.max(...g.areas.map((a) => relevance(p)[a])) as Relevance;

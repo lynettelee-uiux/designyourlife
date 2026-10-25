@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, Icon, Slider, cx } from '../components/ui';
 import { QUESTIONS, type Question, type Tier } from './questions';
-import { AREAS, AREA_ORDER, SITUATIONS, STAGE_INFO, relevance, stageOf, type Area, type Player, type Relevance } from './areas';
+import { AREAS, GROUPS, SITUATIONS, STAGE_INFO, groupById, groupOf, groupRelevance, relevance, stageOf, type Area, type GroupId, type Player, type Relevance } from './areas';
 import {
-  LEVELS, MAX_HEARTS, SPRINT_SECONDS, addStats, diagnose, levelOf, loadProgress, nextTier, pickQuestion, pointsFor, questionsFor, saveProgress, startTier,
+  LEVELS, MAX_HEARTS, SPRINT_SECONDS, addStats, diagnose, groupScores, levelOf, loadProgress, nextTier, pickQuestion, pointsFor, questionsFor, saveProgress, startTier,
   type Answer, type Focus, type Progress,
 } from './game';
-import { SkillRadar, relChip } from './SkillRadar';
+import { SkillRadar } from './SkillRadar';
+import { ageBand, leaderboard, peerAverage } from './peers';
 
 type Mode = 'sprint' | 'practice';
 type Phase = 'home' | 'play' | 'results';
@@ -39,13 +40,12 @@ function beatTarget(): number | undefined {
   }
 }
 
-const focusFor = (player: Player, topic: Area | null): Focus => (topic ? { kind: 'topic', area: topic } : { kind: 'mixed', stage: stageOf(player), weights: relevance(player) });
+const focusFor = (player: Player, group: GroupId | null): Focus => (group ? { kind: 'topic', group } : { kind: 'mixed', stage: stageOf(player), weights: relevance(player) });
 
 export default function ChallengeApp() {
   const [progress, setProgressState] = useState<Progress>(() => loadProgress());
   const [phase, setPhase] = useState<Phase>('home');
   const [round, setRound] = useState<Round | null>(null);
-  const [topic, setTopic] = useState<Area | null>(null);
   const beat = useMemo(beatTarget, []);
 
   const setProgress = useCallback((p: Progress) => {
@@ -61,13 +61,12 @@ export default function ChallengeApp() {
     h?.focus({ preventScroll: true });
   }, [phase]);
 
-  const start = (mode: Mode, area: Area | null = topic) => {
+  const start = (mode: Mode, group: GroupId | null = null) => {
     if (!progress.player) return;
-    const focus = focusFor(progress.player, area);
+    const focus = focusFor(progress.player, group);
     const tier = focus.kind === 'topic' ? 1 : startTier(levelOf(progress.xp).index);
     const r: Round = { mode, focus, answers: [], asked: new Set(), areas: {}, tier, streak: 0, points: 0, msLeft: SPRINT_SECONDS * 1000, before: { xp: progress.xp, best: progress.best } };
     r.current = pickQuestion(QUESTIONS, tier, r.asked, r.areas, focus);
-    setTopic(area);
     setRound(r);
     setPhase('play');
   };
@@ -109,7 +108,7 @@ export default function ChallengeApp() {
       </header>
 
       <main id="main" className="mx-auto w-full max-w-xl px-4 pb-16 pt-4">
-        {phase === 'home' && <Home progress={progress} setProgress={setProgress} beat={beat} topic={topic} setTopic={setTopic} onStart={start} />}
+        {phase === 'home' && <Home progress={progress} setProgress={setProgress} beat={beat} onStart={start} />}
         {phase === 'play' && round && <Play round={round} setRound={setRound} progress={progress} setProgress={setProgress} onFinish={finish} />}
         {phase === 'results' && round && <Results round={round} progress={progress} beat={beat} onAgain={start} onHome={() => setPhase('home')} />}
       </main>
@@ -206,14 +205,12 @@ function PlayerSetup({ initial, onSave, onCancel }: { initial?: Player; onSave: 
 }
 
 function Home({
-  progress, setProgress, beat, topic, setTopic, onStart,
+  progress, setProgress, beat, onStart,
 }: {
   progress: Progress;
   setProgress: (p: Progress) => void;
   beat?: number;
-  topic: Area | null;
-  setTopic: (a: Area | null) => void;
-  onStart: (m: Mode, area?: Area | null) => void;
+  onStart: (m: Mode, group?: GroupId | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const out = progress.hearts <= 0;
@@ -227,18 +224,6 @@ function Home({
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-magenta-300">Test your skills · 60 seconds</p>
           <h1 className="display mt-1 text-[28px] leading-[1.1] text-white">How sharp are your money skills?</h1>
           <p className="mt-2 text-[14px] leading-relaxed text-navy-100">Answer as many as you can before time runs out. Right answers move you up the levels. Wrong ones cost a heart — you get 5 a day.</p>
-          <ul className="mt-4 grid grid-cols-3 gap-2 text-center text-[11px] font-semibold" aria-label="How it works">
-            {[
-              { i: 'Timer', t: '60-second rounds' },
-              { i: 'Heart', t: '5 hearts a day' },
-              { i: 'Target', t: 'Find your weak spots' },
-            ].map((x) => (
-              <li key={x.t} className="rounded-2xl bg-white/15 px-2 py-2.5">
-                <Icon name={x.i} className="mx-auto mb-1 h-5 w-5 text-magenta-300" />
-                {x.t}
-              </li>
-            ))}
-          </ul>
         </div>
       </section>
 
@@ -278,163 +263,154 @@ function Home({
             <div className="mt-4">
               <LevelBar xp={progress.xp} />
             </div>
-            {progress.best > 0 && (
-              <p className="mt-3 flex items-center gap-1.5 text-sm text-ink-soft">
-                <Icon name="Trophy" className="h-4 w-4 text-[#C98A2B]" /> Personal best: <strong className="text-ink">{progress.best} right</strong> in one sprint
-              </p>
+
+            {out ? (
+              <div className="mt-5 rounded-2xl bg-mist-100 p-4 text-sm">
+                <p className="flex items-center gap-2 font-semibold">
+                  <Icon name="HeartCrack" className="h-4 w-4 text-magenta-600" /> Out of hearts for today
+                </p>
+                <p className="mt-1 text-ink-soft">5 new hearts in {untilTomorrow()}.</p>
+              </div>
+            ) : (
+              <button type="button" onClick={() => onStart('sprint', null)} className="mt-5 flex w-full items-center gap-3 rounded-2xl bg-magenta-600 p-4 text-left text-white hover:bg-magenta-700">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/15">
+                  <Icon name="Zap" className="h-6 w-6" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[17px] font-bold">Start a 60-second sprint</span>
+                  <span className="block text-xs text-magenta-100">Mixed questions picked for age {player.age} · {STAGE_INFO[stageOf(player)].label.toLowerCase()}</span>
+                </span>
+                <Icon name="ArrowRight" className="h-5 w-5 shrink-0" />
+              </button>
             )}
+            <p className="mt-2 text-center text-xs text-ink-mute">
+              {out ? 'Meanwhile, you can ' : 'Rather not race? '}
+              <button type="button" onClick={() => onStart('practice', null)} className="font-semibold text-navy-700 underline underline-offset-2">
+                practise without a timer
+              </button>
+            </p>
           </Card>
 
-          <ChooseChallenge player={player} topic={topic} setTopic={setTopic} />
-
-          {out && (
-            <div className="mt-4 rounded-2xl bg-mist-100 p-4 text-sm">
-              <p className="flex items-center gap-2 font-semibold">
-                <Icon name="HeartCrack" className="h-4 w-4 text-magenta-600" /> Out of hearts for today
-              </p>
-              <p className="mt-1 text-ink-soft">5 new hearts in {untilTomorrow()}. Meanwhile, practise without a timer or hearts — or read up on your skill map below.</p>
-            </div>
-          )}
-          <div className="mt-4 grid gap-2">
-            <Button variant="accent" icon={out ? 'Clock' : 'Zap'} disabled={out} className="disabled:bg-mist-200 disabled:text-ink-mute" onClick={() => onStart('sprint')}>
-              {out ? 'Come back tomorrow' : topic ? `Start a 60-second ${AREAS[topic].axis.toLowerCase()} sprint` : 'Start a 60-second sprint'}
-            </Button>
-            <Button variant="secondary" icon="BookOpen" onClick={() => onStart('practice')}>
-              Practice — no timer, no hearts
-            </Button>
-          </div>
-
-          <SkillMapSection player={player} stats={progress.stats} onPractise={(a) => onStart('practice', a)} />
+          <TopicDive player={player} out={out} onStart={onStart} />
+          <Leaderboard player={player} best={progress.best} />
+          <SkillMapSection player={player} stats={progress.stats} />
         </>
       )}
 
       <p className="mt-6 text-center text-xs leading-relaxed text-ink-mute">
-        Progress is kept only in this browser — nothing is sent or saved anywhere else. Questions use public Singapore sources, MoneySense first (with CPF, IRAS, HDB, MOH, MAS and SPF); some prices are illustrative and say so.
+        Progress is kept only in this browser — nothing is sent or saved anywhere else. Questions use public Singapore sources, MoneySense first (with CPF, IRAS, HDB, MOH, MAS and SPF); some prices are illustrative and say so. Leaderboard and peer averages are demo data.
       </p>
     </>
   );
 }
 
-/** Mixed questions for your stage, or one topic of your choice. */
-function ChooseChallenge({ player, topic, setTopic }: { player: Player; topic: Area | null; setTopic: (a: Area | null) => void }) {
-  const rel = relevance(player);
-  const order = [...AREA_ORDER].sort((a, b) => rel[b] - rel[a]);
+/** Secondary option: a sprint on one key area. Collapsed by default to keep one clear main action. */
+function TopicDive({ player, out, onStart }: { player: Player; out: boolean; onStart: (m: Mode, group?: GroupId | null) => void }) {
   return (
-    <section className="rise-3 mt-5" aria-labelledby="choose-h">
-      <h2 id="choose-h" className="display text-xl">Choose your challenge</h2>
-      <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label="Challenge type">
-        {[
-          { v: null, icon: 'Shuffle', t: 'For my stage', d: 'Mixed, weighted to what matters now' },
-          { v: topic ?? 'pick', icon: 'Target', t: 'Pick a topic', d: 'Every question on one skill' },
-        ].map((o) => {
-          const on = o.v === null ? topic === null : topic !== null;
+    <details className="group mt-4 rounded-3xl bg-white shadow-card">
+      <summary className="flex min-h-[56px] cursor-pointer items-center gap-3 px-5 py-3">
+        <Icon name="Target" className="h-5 w-5 text-navy-700" />
+        <span className="flex-1">
+          <span className="block text-sm font-semibold">Or dive into a key area</span>
+          <span className="block text-xs text-ink-mute">Every question on one topic</span>
+        </span>
+        <Icon name="ChevronDown" className="h-4 w-4 text-ink-mute transition-transform group-open:rotate-180" />
+      </summary>
+      <ul className="grid grid-cols-2 gap-2 px-4 pb-4">
+        {GROUPS.map((g) => {
+          const core = groupRelevance(player, g) === 2;
           return (
-            <button
-              key={o.t}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setTopic(o.v === null ? null : topic ?? order[0])}
-              className={cx('rounded-2xl border p-3 text-left', on ? 'border-navy-800 bg-white shadow-card' : 'border-mist-200 bg-white/60 hover:border-ink-soft')}
-            >
-              <Icon name={o.icon} className="h-5 w-5 text-navy-700" />
-              <span className="mt-1 block text-sm font-semibold">{o.t}</span>
-              <span className="block text-xs text-ink-mute">{o.d}</span>
-            </button>
+            <li key={g.id}>
+              <button type="button" onClick={() => onStart(out ? 'practice' : 'sprint', g.id)} className="flex h-full w-full flex-col items-start rounded-2xl border border-mist-200 p-3 text-left hover:border-ink-soft">
+                <span className="flex w-full items-center justify-between">
+                  <Icon name={g.icon} className="h-5 w-5 text-navy-700" />
+                  {core && <span className="rounded-full bg-magenta-50 px-1.5 py-0.5 text-[10px] font-bold text-magenta-700">Core for you</span>}
+                </span>
+                <span className="mt-1.5 text-sm font-semibold leading-tight">{g.title}</span>
+                <span className="text-xs text-ink-mute">{g.blurb}</span>
+              </button>
+            </li>
           );
         })}
+      </ul>
+    </details>
+  );
+}
+
+/** Demo leaderboard for the player's age band — clearly labelled; replace with real scores later. */
+function Leaderboard({ player, best }: { player: Player; best: number }) {
+  const band = ageBand(player.age).label;
+  const rows = leaderboard(player, best);
+  const me = rows.find((r) => r.you);
+  const shown = rows.filter((r) => r.rank <= 5 || r.you);
+  return (
+    <section className="mt-8" aria-labelledby="board-h">
+      <div className="flex items-end justify-between gap-2">
+        <h2 id="board-h" className="display text-xl">This week · ages {band}</h2>
+        <span className="rounded bg-mist-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-mute">Demo</span>
       </div>
-      {topic && (
-        <div className="pop mt-3">
-          <p className="text-xs font-semibold text-ink-mute">Topics, most relevant to you first</p>
-          <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Topic">
-            {order.map((a) => (
-              <button
-                key={a}
-                type="button"
-                aria-pressed={topic === a}
-                onClick={() => setTopic(a)}
-                className={cx('inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-3 text-sm font-semibold', topic === a ? 'border-navy-800 bg-navy-800 text-white' : 'border-mist-300 bg-white hover:border-ink-soft')}
-              >
-                <Icon name={AREAS[a].icon} className="h-4 w-4" />
-                {AREAS[a].axis}
-                {rel[a] === 2 && <span className={cx('h-1.5 w-1.5 rounded-full', topic === a ? 'bg-magenta-300' : 'bg-magenta-500')} aria-label="core for your stage" />}
-              </button>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-ink-mute">
-            <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-magenta-500 align-middle" aria-hidden /> Core for your stage · {questionsFor(QUESTIONS, { kind: 'topic', area: topic }).length} questions on {AREAS[topic].axis.toLowerCase()}
-          </p>
-        </div>
-      )}
+      <p className="mt-1 text-xs text-ink-mute">Sample players to show how a leaderboard would work — not real people. Ranked by most right in one sprint.</p>
+      <ol className="mt-3 overflow-hidden rounded-3xl bg-white shadow-card">
+        {shown.map((r, i) => (
+          <li key={r.name} className={cx('flex items-center gap-3 px-4 py-2.5 text-sm', i > 0 && 'border-t border-mist-100', r.you && 'bg-magenta-50 font-semibold', r.you && r.rank > 6 && 'border-t-2 border-dashed border-mist-200')}>
+            <span className={cx('grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold', r.rank === 1 ? 'bg-[#FBEFD9] text-[#8A5A12]' : 'bg-mist-100 text-ink-soft')}>{r.rank}</span>
+            <span className="flex-1 truncate">{r.you ? 'You' : r.name}</span>
+            <span className="tabular-nums text-ink-soft">{r.best} right</span>
+          </li>
+        ))}
+      </ol>
+      {!me && <p className="mt-2 text-xs text-ink-mute">Play a sprint to get on the board.</p>}
     </section>
   );
 }
 
-/** What to know at your age: the spider diagram plus the same information as a list. */
-function SkillMapSection({ player, stats, onPractise, compact }: { player: Player; stats: Progress['stats']; onPractise?: (a: Area) => void; compact?: boolean }) {
-  const rel = relevance(player);
-  const stage = stageOf(player);
-  const groups: { r: Relevance; title: string }[] = [
-    { r: 2, title: 'Core for you now' },
-    { r: 1, title: 'Good to know' },
-    { r: 0, title: 'Coming up later' },
-  ];
+/** How you compare: the spider diagram plus the same information as a list. */
+function SkillMapSection({ player, stats }: { player: Player; stats: Progress['stats'] }) {
+  const you = groupScores(stats);
+  const peers = peerAverage(player);
+  const band = ageBand(player.age).label;
+  const rel = Object.fromEntries(GROUPS.map((g) => [g.id, groupRelevance(player, g)])) as Record<GroupId, Relevance>;
   return (
     <section className="mt-8" aria-labelledby="map-h">
-      <h2 id="map-h" className="display text-xl">
-        What to know at {player.age}
-      </h2>
-      <p className="mt-1 text-sm leading-relaxed text-ink-soft">{STAGE_INFO[stage].focus}</p>
+      <h2 id="map-h" className="display text-xl">How you compare</h2>
+      <p className="mt-1 text-sm leading-relaxed text-ink-soft">{STAGE_INFO[stageOf(player)].focus}</p>
       <Card className="mt-3 p-4">
-        <SkillRadar rel={rel} stats={stats} />
+        <SkillRadar you={you} peers={peers} rel={rel} bandLabel={band} />
       </Card>
-      {!compact && (
-        <div className="mt-4 space-y-4">
-          {groups.map((g) => {
-            const areas = AREA_ORDER.filter((a) => rel[a] === g.r);
-            if (!areas.length) return null;
-            return (
-              <div key={g.r}>
-                <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-ink-mute">{g.title}</h3>
-                <ul className="mt-2 space-y-2">
-                  {areas.map((a) => {
-                    const s = stats[a];
-                    const share = s && s.seen ? s.right / s.seen : undefined;
-                    return (
-                      <li key={a} className="rounded-2xl bg-white p-3 shadow-card">
-                        <div className="flex items-center justify-between gap-2 text-sm">
-                          <span className="flex min-w-0 items-center gap-2 font-semibold">
-                            <Icon name={AREAS[a].icon} className="h-4 w-4 shrink-0 text-navy-700" />
-                            <span className="truncate">{AREAS[a].title}</span>
-                          </span>
-                          <span className="shrink-0 text-xs font-semibold text-ink-mute">{s?.seen ? `${s.right} of ${s.seen}` : 'Not tried'}</span>
-                        </div>
-                        <div className="mt-2 h-1.5 rounded-full bg-mist-100" aria-hidden>
-                          {share !== undefined && <div className={cx('h-1.5 rounded-full', share >= 0.8 ? 'bg-sage-600' : share >= 0.5 ? 'bg-[#C98A2B]' : 'bg-magenta-500')} style={{ width: `${Math.max(6, share * 100)}%` }} />}
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                          {onPractise && (
-                            <button type="button" onClick={() => onPractise(a)} className="text-xs font-semibold text-magenta-700 underline-offset-4 hover:underline">
-                              Practise this topic
-                            </button>
-                          )}
-                          {(share === undefined || share < 0.8) && (
-                            <a href={AREAS[a].readings[0].url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-navy-700 underline-offset-4 hover:underline">
-                              Read: {AREAS[a].readings[0].label} · {AREAS[a].readings[0].org}
-                              <Icon name="ExternalLink" className="h-3 w-3" />
-                              <span className="sr-only">(opens in a new tab)</span>
-                            </a>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+      <ul className="mt-3 space-y-2">
+        {GROUPS.map((g) => {
+          const y = you[g.id];
+          const weak = y.share !== undefined && y.share < peers[g.id];
+          return (
+            <li key={g.id} className="rounded-2xl bg-white p-3 shadow-card">
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="flex min-w-0 items-center gap-2 font-semibold">
+                  <Icon name={g.icon} className="h-4 w-4 shrink-0 text-navy-700" />
+                  <span className="truncate">{g.title}</span>
+                  {rel[g.id] === 2 && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-magenta-500" aria-label="core for your stage" />}
+                </span>
+                <span className="shrink-0 text-xs font-semibold text-ink-mute">
+                  {y.seen ? `You ${Math.round((y.share ?? 0) * 100)}%` : 'Not tried'} · Peers {Math.round(peers[g.id] * 100)}%
+                </span>
               </div>
-            );
-          })}
-        </div>
-      )}
+              <div className="relative mt-2 h-1.5 rounded-full bg-mist-100" aria-hidden>
+                {y.share !== undefined && <div className={cx('h-1.5 rounded-full', y.share >= peers[g.id] ? 'bg-sage-600' : 'bg-magenta-500')} style={{ width: `${Math.max(6, y.share * 100)}%` }} />}
+                <span className="absolute -top-1 h-3.5 w-0.5 rounded bg-[#1A56E5]" style={{ left: `${peers[g.id] * 100}%` }} />
+              </div>
+              {weak && (
+                <a href={AREAS[g.areas[0]].readings[0].url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-navy-700 underline-offset-4 hover:underline">
+                  Read: {AREAS[g.areas[0]].readings[0].label} · {AREAS[g.areas[0]].readings[0].org}
+                  <Icon name="ExternalLink" className="h-3 w-3" />
+                  <span className="sr-only">(opens in a new tab)</span>
+                </a>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-xs text-ink-mute">
+        <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-magenta-500 align-middle" aria-hidden />Core for your stage · blue mark = players aged {band} (demo)
+      </p>
     </section>
   );
 }
@@ -541,7 +517,7 @@ function Play({
         )}
         {round.focus.kind === 'topic' && (
           <p className="mt-1.5 text-xs text-ink-mute">
-            Topic: <strong className="text-ink-soft">{AREAS[round.focus.area].title}</strong> · question {round.answers.length + (answering ? 1 : 0)} of {total}
+            Topic: <strong className="text-ink-soft">{groupById(round.focus.group).title}</strong> · question {round.answers.length + (answering ? 1 : 0)} of {total}
           </p>
         )}
         <p className="sr-only" aria-live="assertive">{announce}</p>
@@ -622,7 +598,7 @@ function Play({
 
 // ---------------------------------------------------------------------------------------------
 
-function Results({ round, progress, beat, onAgain, onHome }: { round: Round; progress: Progress; beat?: number; onAgain: (m: Mode, area?: Area | null) => void; onHome: () => void }) {
+function Results({ round, progress, beat, onAgain, onHome }: { round: Round; progress: Progress; beat?: number; onAgain: (m: Mode, group?: GroupId | null) => void; onHome: () => void }) {
   const sprint = round.mode === 'sprint';
   const right = round.answers.filter((a) => a.right).length;
   const before = levelOf(round.before.xp);
@@ -637,11 +613,11 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
     .slice(0, 3)
     .sort((a, b) => a.share - b.share || (rel ? rel[b.area] - rel[a.area] : 0));
   const strong = (thisRound.strong.length ? thisRound.strong : allTime.strong).slice(0, 3);
-  const topicArea = round.focus.kind === 'topic' ? round.focus.area : null;
+  const topicGroup = round.focus.kind === 'topic' ? round.focus.group : null;
   const [shared, setShared] = useState('');
 
   const headline =
-    round.endedBy === 'hearts' ? 'Out of hearts!' : round.endedBy === 'time' ? 'Time’s up!' : round.endedBy === 'questions' ? (topicArea ? `You answered every ${AREAS[topicArea].axis.toLowerCase()} question!` : 'You answered every question!') : 'Practice done';
+    round.endedBy === 'hearts' ? 'Out of hearts!' : round.endedBy === 'time' ? 'Time’s up!' : round.endedBy === 'questions' ? (topicGroup ? `You answered every ${groupById(topicGroup).title.toLowerCase()} question!` : 'You answered every question!') : 'Practice done';
 
   const link = `${window.location.origin}${window.location.pathname}?beat=${right}`;
   const message = `I got ${right} right in a 60-second Design Your Life money sprint. Can you beat it?`;
@@ -670,7 +646,7 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
         <h1 className="display mt-2 text-[34px] leading-tight text-white">
           {right} right{sprint ? ` in ${secondsLabel(SPRINT_SECONDS - round.msLeft / 1000)}` : ` of ${round.answers.length}`}
         </h1>
-        {topicArea && <p className="mt-1 text-sm text-navy-100">Topic: {AREAS[topicArea].title}</p>}
+        {topicGroup && <p className="mt-1 text-sm text-navy-100">Topic: {groupById(topicGroup).title}</p>}
         {sprint && <p className="mt-1 text-navy-100">+{round.points} points</p>}
         <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs font-bold">
           {levelledUp && <span className="rounded-full bg-white px-3 py-1 text-magenta-700">Level up! You’re now a {after.name}</span>}
@@ -711,7 +687,7 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
                         <span className="rounded-full bg-mist-100 px-2 py-0.5 text-xs font-semibold text-ink-soft">
                           {w.right} of {w.seen} right
                         </span>
-                        {rel && relChip(rel[w.area])}
+                        {rel && rel[w.area] === 2 && <span className="rounded-full bg-magenta-50 px-2 py-0.5 text-[11px] font-bold text-magenta-700">Core for you</span>}
                       </span>
                     </div>
                     <p className="mt-2 text-sm leading-relaxed text-ink-soft">{s.fact}</p>
@@ -730,14 +706,10 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
                           </a>
                         </li>
                       ))}
-                      <li className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
-                        <button type="button" onClick={() => onAgain('practice', w.area)} className="inline-flex items-center gap-1 text-sm font-semibold text-magenta-700 underline-offset-4 hover:underline">
-                          Practise this topic <Icon name="ArrowRight" className="h-3.5 w-3.5" />
+                      <li className="pt-1">
+                        <button type="button" onClick={() => onAgain('practice', groupOf(w.area).id)} className="inline-flex items-center gap-1 text-sm font-semibold text-magenta-700 underline-offset-4 hover:underline">
+                          Practise {groupOf(w.area).title.toLowerCase()} <Icon name="ArrowRight" className="h-3.5 w-3.5" />
                         </button>
-                        <a href={s.practise.href} className="inline-flex items-center gap-1 text-sm font-semibold text-magenta-700 underline-offset-4 hover:underline">
-                          {s.practise.label}
-                          <Icon name="ArrowRight" className="h-3.5 w-3.5" />
-                        </a>
                       </li>
                     </ul>
                   </Card>
@@ -755,14 +727,15 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
             {strong.map((s) => (
               <li key={s.area} className="inline-flex items-center gap-1.5 rounded-full bg-sage-100 px-3 py-1.5 text-sm font-semibold text-sage-700">
                 <Icon name={AREAS[s.area].icon} className="h-4 w-4" />
-                {AREAS[s.area].axis}
+                {AREAS[s.area].title}
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      {progress.player && <SkillMapSection player={progress.player} stats={progress.stats} compact />}
+      {progress.player && sprint && <Leaderboard player={progress.player} best={progress.best} />}
+      {progress.player && <SkillMapSection player={progress.player} stats={progress.stats} />}
 
       {round.answers.length > 0 && (
         <section className="mt-6" aria-labelledby="review-h">
@@ -787,11 +760,11 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
 
       <div className="mt-8 grid gap-2">
         {progress.hearts > 0 ? (
-          <Button variant="accent" icon="Zap" onClick={() => onAgain('sprint', topicArea)}>
-            {topicArea ? `Another ${AREAS[topicArea].axis.toLowerCase()} sprint` : 'Another sprint'}
+          <Button variant="accent" icon="Zap" onClick={() => onAgain('sprint', topicGroup)}>
+            {topicGroup ? `Another ${groupById(topicGroup).title.toLowerCase()} sprint` : 'Another sprint'}
           </Button>
         ) : (
-          <Button variant="secondary" icon="BookOpen" onClick={() => onAgain('practice', topicArea)}>
+          <Button variant="secondary" icon="BookOpen" onClick={() => onAgain('practice', topicGroup)}>
             Keep practising — no timer, no hearts
           </Button>
         )}

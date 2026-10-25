@@ -1,111 +1,96 @@
-// Spider diagram: one spoke per money skill. The dashed blue shape is what's worth knowing at your
-// life stage; the solid pink shape is how you've scored. Colours are validated for colour-vision
-// deficiency, and the two series also differ by line style. The list under the chart is the
-// text equivalent.
+// Spider diagram: one spoke per key money area. Solid pink = your share right; dashed blue = the
+// average for players your age (demo data until real scores exist — labelled as such). Colours are
+// validated for colour-vision deficiency, and the two series also differ by line style. The list
+// under the chart is the text equivalent.
 
 import { useState } from 'react';
-import { cx } from '../components/ui';
-import { AREAS, AREA_ORDER, TARGET, type Area, type Relevance } from './areas';
-import type { Progress } from './game';
+import { GROUPS, type GroupId, type Relevance } from './areas';
 
 const YOU = '#E6187F';
-const STAGE = '#1A56E5';
+const PEERS = '#1A56E5';
 const W = 420;
-const H = 330;
+const H = 320;
 const CX = W / 2;
-const CY = H / 2;
-const R = 108;
-
-const REL_WORD: Record<Relevance, string> = { 2: 'core for your stage', 1: 'good to know', 0: 'for later' };
+const CY = H / 2 + 4;
+const R = 112;
 
 function point(i: number, v: number) {
-  const a = -Math.PI / 2 + (i / AREA_ORDER.length) * Math.PI * 2;
+  const a = -Math.PI / 2 + (i / GROUPS.length) * Math.PI * 2;
   return [CX + Math.cos(a) * R * v, CY + Math.sin(a) * R * v] as const;
 }
 const path = (vals: number[]) => vals.map((v, i) => point(i, v).join(',')).join(' ');
+const pct = (v?: number) => (v === undefined ? '—' : `${Math.round(v * 100)}%`);
 
-export function SkillRadar({ rel, stats }: { rel: Record<Area, Relevance>; stats: Progress['stats'] }) {
-  const [hover, setHover] = useState<Area | null>(null);
-  const target = AREA_ORDER.map((a) => TARGET[rel[a]]);
-  const you = AREA_ORDER.map((a) => {
-    const s = stats[a];
-    return s && s.seen > 0 ? s.right / s.seen : 0;
-  });
-  const tried = AREA_ORDER.filter((a) => (stats[a]?.seen ?? 0) > 0).length;
-  const h = hover ? AREA_ORDER.indexOf(hover) : -1;
-  const hs = hover ? stats[hover] : undefined;
+export function SkillRadar({
+  you, peers, rel, bandLabel,
+}: {
+  you: Record<GroupId, { right: number; seen: number; share?: number }>;
+  peers: Record<GroupId, number>;
+  rel: Record<GroupId, Relevance>;
+  bandLabel: string;
+}) {
+  const [hover, setHover] = useState<GroupId | null>(null);
+  const tried = GROUPS.some((g) => you[g.id].seen > 0);
+  const hg = hover ? GROUPS.find((g) => g.id === hover)! : null;
+  const hi = hg ? GROUPS.indexOf(hg) : -1;
 
   return (
     <figure className="m-0">
       <figcaption className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-ink-soft">
         <span className="inline-flex items-center gap-1.5">
           <svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" stroke={YOU} strokeWidth="2" /><circle cx="11" cy="5" r="3.5" fill={YOU} stroke="#fff" strokeWidth="1.5" /></svg>
-          You {tried === 0 && <span className="font-normal text-ink-mute">(play a round to fill this in)</span>}
+          You {!tried && <span className="font-normal text-ink-mute">(play a sprint to fill this in)</span>}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" stroke={STAGE} strokeWidth="2" strokeDasharray="4 3" /></svg>
-          What to know at your stage
+          <svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" stroke={PEERS} strokeWidth="2" strokeDasharray="4 3" /></svg>
+          Players aged {bandLabel}
+          <span className="rounded bg-mist-100 px-1 py-px text-[10px] font-bold uppercase tracking-wide text-ink-mute">demo</span>
         </span>
       </figcaption>
-      <div className="relative">
-        <svg viewBox={`0 0 ${W} ${H}`} className="mt-1 w-full" onMouseLeave={() => setHover(null)} role="img" aria-label={`Spider diagram of ${AREA_ORDER.length} money skills comparing your scores with what matters at your life stage. Details are listed below.`}>
-          {[0.25, 0.5, 0.75, 1].map((r) => (
-            <polygon key={r} points={path(AREA_ORDER.map(() => r))} fill="none" stroke="#E2E6F0" strokeWidth={1} />
-          ))}
-          {AREA_ORDER.map((a, i) => {
-            const [x, y] = point(i, 1);
-            return <line key={a} x1={CX} y1={CY} x2={x} y2={y} stroke="#E2E6F0" strokeWidth={1} />;
-          })}
-          <polygon points={path(target)} fill={STAGE} fillOpacity={0.07} stroke={STAGE} strokeWidth={2} strokeDasharray="5 4" strokeLinejoin="round" />
-          {tried > 0 && <polygon points={path(you)} fill={YOU} fillOpacity={0.18} stroke={YOU} strokeWidth={2} strokeLinejoin="round" />}
-          {tried > 0 &&
-            AREA_ORDER.map((a, i) => {
-              if (!(stats[a]?.seen ?? 0)) return null;
-              const [x, y] = point(i, you[i]);
-              return <circle key={a} cx={x} cy={y} r={4.5} fill={YOU} stroke="#fff" strokeWidth={2} />;
-            })}
-          {AREA_ORDER.map((a, i) => {
-            const [x, y] = point(i, 1.17);
-            const anchor = Math.abs(x - CX) < 8 ? 'middle' : x > CX ? 'start' : 'end';
-            const seen = (stats[a]?.seen ?? 0) > 0;
-            return (
-              <text key={a} x={x} y={y} dy="0.35em" textAnchor={anchor} fontSize="11" fontWeight={rel[a] === 2 ? 700 : 500} fill={seen || rel[a] > 0 ? '#17123D' : '#5E5C7A'} fontStyle={rel[a] === 0 ? 'italic' : undefined}>
-                {AREAS[a].axis}
-              </text>
-            );
-          })}
-          {/* Generous invisible hit areas for hover, one wedge per spoke */}
-          {AREA_ORDER.map((a, i) => {
-            const p1 = point(i - 0.5, 1.3);
-            const p2 = point(i + 0.5, 1.3);
-            return (
-              <polygon key={a} points={`${CX},${CY} ${p1.join(',')} ${p2.join(',')}`} fill="transparent" onMouseEnter={() => setHover(a)} onClick={() => setHover(a)} />
-            );
-          })}
-          {h >= 0 && (
-            <line x1={CX} y1={CY} x2={point(h, 1)[0]} y2={point(h, 1)[1]} stroke="#17123D" strokeOpacity={0.35} strokeWidth={1} pointerEvents="none" />
-          )}
-        </svg>
-      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="mt-1 w-full" onMouseLeave={() => setHover(null)} role="img" aria-label={`Spider diagram of ${GROUPS.length} key money areas comparing your scores with demo averages for players aged ${bandLabel}. Details are listed below.`}>
+        {[0.25, 0.5, 0.75, 1].map((r) => (
+          <polygon key={r} points={path(GROUPS.map(() => r))} fill="none" stroke="#E2E6F0" strokeWidth={1} />
+        ))}
+        {GROUPS.map((g, i) => {
+          const [x, y] = point(i, 1);
+          return <line key={g.id} x1={CX} y1={CY} x2={x} y2={y} stroke="#E2E6F0" strokeWidth={1} />;
+        })}
+        <polygon points={path(GROUPS.map((g) => peers[g.id]))} fill={PEERS} fillOpacity={0.07} stroke={PEERS} strokeWidth={2} strokeDasharray="5 4" strokeLinejoin="round" />
+        {tried && <polygon points={path(GROUPS.map((g) => you[g.id].share ?? 0))} fill={YOU} fillOpacity={0.18} stroke={YOU} strokeWidth={2} strokeLinejoin="round" />}
+        {GROUPS.map((g, i) => {
+          if (!you[g.id].seen) return null;
+          const [x, y] = point(i, you[g.id].share ?? 0);
+          return <circle key={g.id} cx={x} cy={y} r={4.5} fill={YOU} stroke="#fff" strokeWidth={2} />;
+        })}
+        {GROUPS.map((g, i) => {
+          const [x, y] = point(i, 1.16);
+          const anchor = Math.abs(x - CX) < 8 ? 'middle' : x > CX ? 'start' : 'end';
+          return (
+            <text key={g.id} x={x} y={y} dy="0.35em" textAnchor={anchor} fontSize="12" fontWeight={rel[g.id] === 2 ? 700 : 500} fill="#17123D">
+              {g.axis}
+            </text>
+          );
+        })}
+        {GROUPS.map((g, i) => {
+          const p1 = point(i - 0.5, 1.35);
+          const p2 = point(i + 0.5, 1.35);
+          return <polygon key={g.id} points={`${CX},${CY} ${p1.join(',')} ${p2.join(',')}`} fill="transparent" onMouseEnter={() => setHover(g.id)} onClick={() => setHover(g.id)} />;
+        })}
+        {hi >= 0 && <line x1={CX} y1={CY} x2={point(hi, 1)[0]} y2={point(hi, 1)[1]} stroke="#17123D" strokeOpacity={0.35} strokeWidth={1} pointerEvents="none" />}
+      </svg>
       <p className="mt-1 min-h-[2.5rem] text-center text-xs leading-snug text-ink-soft" aria-hidden>
-        {hover ? (
+        {hg ? (
           <>
-            <strong className="text-ink">{AREAS[hover].title}</strong>
+            <strong className="text-ink">{hg.title}</strong>
             <br />
-            {hs?.seen ? `You: ${hs.right} of ${hs.seen} right` : 'Not tried yet'} · {REL_WORD[rel[hover]]}
+            You: {you[hg.id].seen ? `${you[hg.id].right} of ${you[hg.id].seen} right (${pct(you[hg.id].share)})` : 'not tried yet'} · Players {bandLabel}: {pct(peers[hg.id])} (demo)
           </>
         ) : (
-          'Tap or hover a spoke for details'
+          <>
+            Tap or hover a spoke for details. <strong>Bold</strong> areas are core at your stage.
+          </>
         )}
       </p>
     </figure>
-  );
-}
-
-export function relChip(r: Relevance) {
-  return (
-    <span className={cx('rounded-full px-2 py-0.5 text-[11px] font-bold', r === 2 ? 'bg-navy-50 text-navy-700' : r === 1 ? 'bg-mist-100 text-ink-soft' : 'bg-white text-ink-mute ring-1 ring-mist-200')}>
-      {r === 2 ? 'Core now' : r === 1 ? 'Good to know' : 'Later'}
-    </span>
   );
 }

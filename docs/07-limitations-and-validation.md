@@ -53,3 +53,6 @@ No accounts, NRIC, exact income, credentials or bank links · nickname only · e
 
 ## Recommended next iterations (Priority 3)
 Broader 25–35 chapter library (BTO with partner, caregiving, parenthood) · CPF LIFE payout estimation via CPF's published method · HDB affordability with grants and loan limits · monthly (not annual) CPF interest · bonus/AW handling · Monte Carlo ranges · optional anonymous analytics with consent · localisation (Chinese, Malay, Tamil) · dark mode.
+
+## Sprint: demo comparisons
+The Sprint's leaderboard and "players your age" averages are generated demo data, labelled "demo" in the UI. They show the intended experience, not real performance. Replace them with real anonymous aggregates, or remove them, before public use.
