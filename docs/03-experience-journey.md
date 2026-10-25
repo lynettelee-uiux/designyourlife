@@ -79,3 +79,11 @@ Gap review of the original six (travel, own place, pet, career break, home, reti
 - **Launch day** — go all in, test small first, or save two more years. Quick guess: break-even units ($600 fixed ÷ $12 margin = 50; the trap is dividing by the price).
 
 Considered but not added: wedding/BTO with a partner (strongly relevant from 25+, but needs couple-level modelling), a car (COE makes it a powerful lesson but prices are volatile), and further studies (fees vary widely by course).
+
+## Sprint — a competitive "test your skills" mode (separate page)
+Lite and the full version are unchanged apart from a "Test your skills" card at the end of each. The Sprint is for people who like games: it tells them which money skills they're weak in and points them to official readings and tools.
+- **Rules:** 60-second rounds. Points = 10 / 20 / 30 for easy / medium / hard, +5 for a streak of 3 or more. Points carry across days and move you up five levels. Each wrong answer costs one of 5 daily hearts. When the hearts run out, timed play stops until midnight, but practice mode stays open, so learning never locks.
+- **Adaptive:** a round starts at a tier set by your level. Two right in a row steps the questions up a tier, and a wrong answer steps them down. Questions are spread across skills so the diagnosis covers as many as possible.
+- **Learning stays in:** the clock pauses while you read each explanation. Results list the skills to work on (lowest accuracy first), each with a fact, a "try this week" tip, official links and where to practise. Every answer can be reviewed, mistakes first.
+- **Competitive without a server:** personal best, levels, and a friend-challenge link with only the score in it. No fake leaderboard. A real one would need accounts and a backend; consider it after youth testing.
+- **Accessibility:** practice mode has no time limit (WCAG 2.2.1). Number keys 1–4 answer and Enter moves on. Hearts and the timer have text equivalents, and screen readers hear a time warning at 30 and 10 seconds.

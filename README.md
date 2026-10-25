@@ -4,9 +4,10 @@
 
 A mobile-first, personalised financial life simulator prototype for Singapore youths (20–24). Users imagine the future they want, see what it might take, make life decisions in a branching story, and explore how changing one thing reshapes their outlook — using simplified 2026 Singapore rules (CPF, tax, inflation).
 
-**Two versions, one engine**
+**Two versions, one engine — plus a skills challenge**
 - **Full** (`/`): ~8–10 minutes — 12 dreams, reality check, habit questions, a 5–7 chapter life story, outlook, Change One Thing and six tools.
 - **Lite** (`/lite/`): ~4 minutes, 6 short steps, all one-tap ranges — you (age, situation, when full-time work starts, living) → your money (income sources: family allowance, part-time, freelance, internship, salary, NS — each as a range; savings; money given to family) → 6 money-habit questions → up to 3 dreams with a near/far verdict, a *why* for each and the figures used → three life moments matched to life stage (e.g. students: grad trip, pay-later, freelance client) → a visual, shareable **Future Card** (no amounts), strengths, and three money skills drawn from habits and choices, each with a tip, a quick check and an official link. No saving. Code in `src/lite/`.
+- **Sprint** (`/challenge/`): a separate, competitive “test your skills” game, linked from the end of Lite and the full version. 60-second rounds; right answers earn points (harder questions and streaks earn more) that move you up five levels (Rookie → Saver → Planner → Strategist → Money Pro). Wrong answers cost a heart, with 5 hearts a day, refilled at local midnight. Difficulty adapts within a round (two right in a row → harder; a wrong answer → easier). About 47 questions across the same 10 money skills Lite recommends. Figures come from the sources registry or are computed with the engine. The results page diagnoses weak skills from this round and all rounds on the device, and recommends official readings (CPF, IRAS, HDB, MoneySense, ScamShield) plus where to practise in Lite or the full version. There is also an untimed practice mode with no hearts (an accessible alternative to the timer), and a “challenge a friend” link (`?beat=N`, carrying only the score). Code in `src/challenge/`.
 
 > Educational illustration only — not a prediction and not financial advice. No accounts, no real data required, nothing leaves the browser.
 
@@ -41,7 +42,7 @@ The app is fully static (no backend). `npm run build` produces `dist/` with rela
 Fonts load from Google Fonts; everything else is bundled. Recharts is code-split and loads when the first chart appears.
 
 ## Privacy & storage
-Progress is saved only in the browser's `localStorage` (key `design-your-life:v1`) when "Remember my progress" is on (default). Users can turn it off or clear everything from the menu or About page. No analytics, cookies or network calls carry user data.
+Progress is saved only in the browser's `localStorage` (key `design-your-life:v1`) when "Remember my progress" is on (default). Users can turn it off or clear everything from the menu or About page. No analytics, cookies or network calls carry user data. The Sprint keeps level, points, best score, hearts and per-skill tallies under `dyl-sprint-v1` in the same browser only.
 
 ## Project structure
 ```
@@ -56,7 +57,9 @@ src/
   components/        UI kit, chart, tools
   screens/           Welcome, Profile, Dream, Reality, Habits, LifeHappens, Outlook, NextMove, About
   lite/              Design Your Life (Lite): LiteApp, liteSim (+ tests), entry point
+  challenge/         Sprint: question bank, game rules (+ tests), ChallengeApp
 lite/index.html      Lite page entry
+challenge/index.html Sprint page entry
 docs/                Research, personas, journey, design system, model, scenario schema, limitations
 ```
 

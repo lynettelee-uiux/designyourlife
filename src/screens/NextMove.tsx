@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SprintCard } from '../components/SprintCard';
 import { ActionBar, Button, Card, Icon, Note, Screen, Slider, StageIntro, StatusDot, cx } from '../components/ui';
 import { OutlookChart } from '../components/LazyOutlookChart';
 import { TOOLS, ToolPanel, type ToolId } from '../components/Tools';
@@ -221,6 +222,8 @@ export default function NextMove() {
           </Button>
         </div>
       </section>
+
+      <SprintCard href="./challenge/" />
 
       <div className="mt-6">
         <Note>This is an educational simulation, not financial advice. It doesn’t recommend any product. For decisions about your own money, use official calculators and consider speaking to a licensed adviser.</Note>

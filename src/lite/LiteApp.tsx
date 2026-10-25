@@ -14,6 +14,7 @@ import type { GoalResult } from '../engine/goals';
 import { LITE_DREAMS, MAX_DREAMS, dreamAlreadyMet, emptyInput, liteSimulate, momentImpact, type LiteInput, type LiteResult } from './liteSim';
 import { GIVING_BANDS, HABIT_QS, INCOME_SOURCES, SAVINGS_BANDS, SOURCES_FOR, WORK_START, lifestyleFrom, type IncomeSource, type LiteHabits } from './inputs';
 import { pickSkills } from './literacy';
+import { SprintCard } from '../components/SprintCard';
 import { futureQuote, strengths } from './story';
 import type { CardData } from './shareCard';
 
@@ -617,6 +618,8 @@ function StepResults({ input, set, result, onRestart }: StepProps & { result: Li
           </Button>
         </div>
       </section>
+
+      <SprintCard href="../challenge/" />
 
       <p className="mt-5 text-center text-xs leading-relaxed text-ink-mute">Uses simplified 2026 Singapore rules (CPF, tax, ~2% inflation) and typical figures for your situation. An illustration, not financial advice. Nothing you enter is saved.</p>
     </>
