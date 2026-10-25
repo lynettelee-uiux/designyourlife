@@ -1,9 +1,9 @@
-// Question bank for Design Your Life (Sprint). Every question belongs to one money skill (the same
-// ten skills Lite recommends), has a difficulty tier (1 basics → 3 tricky), and an explanation.
+// Question bank for Design Your Life (Sprint). Every question belongs to one money skill (Lite's ten
+// skills plus protection and legacy planning), has a difficulty tier (1 basics → 3 tricky), and an explanation.
 // Figures come from the sources registry (src/data/sources.ts) or are computed with the engine, so
 // the quiz and the simulators never disagree. Anything illustrative says so.
 
-import type { SkillId } from '../lite/literacy';
+import type { Area, Stage } from './areas';
 import { monthlyCpf } from '../engine/cpf';
 import { residentTax } from '../engine/tax';
 import { BASE_YEAR, EARNED_INCOME_RELIEF_BELOW_55 } from '../engine/assumptions';
@@ -13,7 +13,9 @@ export type Tier = 1 | 2 | 3;
 
 export interface Question {
   id: string;
-  area: SkillId;
+  area: Area;
+  /** Only asked in mixed rounds for these life stages (topic rounds ask everything). Omitted = everyone. */
+  stages?: Stage[];
   tier: Tier;
   question: string;
   options: string[];
@@ -375,5 +377,195 @@ export const QUESTIONS: Question[] = [
     options: ['Paying off a credit card balance charging 27%', 'A 4% savings account', 'A stranger’s “guaranteed 27%” investment'], answer: 0,
     explain: 'Every dollar of a 27% balance you pay off saves 27% a year in interest — guaranteed. A stranger’s guarantee is a scam red flag.',
     sourceIds: ['creditCards'],
+  },
+  // ---------- More by skill (MoneySense first) ----------
+  {
+    id: 'bud-allowance', area: 'budgeting', tier: 2, stages: ['student', 'ns'],
+    question: 'Your allowance is $500 a month. Food $280, transport $60, phone $20, fun $100. You want to save 10% first. What happens?',
+    options: ['You can save $50 and still spend as planned', 'You’d need to trim $10 somewhere', 'Saving isn’t possible on an allowance'], answer: 1,
+    explain: 'Spending adds up to $460, leaving $40. Saving $50 (10%) first means trimming $10 — small changes make saving first work.',
+  },
+  {
+    id: 'emg-range', area: 'emergency', tier: 2,
+    question: 'Your monthly expenses are $2,000. What emergency fund does MoneySense’s rule of thumb point to?',
+    options: ['$2,000–$4,000', '$6,000–$12,000', 'At least $24,000'], answer: 1,
+    explain: '3 to 6 months of expenses: 3 × $2,000 = $6,000 up to 6 × $2,000 = $12,000.',
+    sourceIds: ['moneysenseBasics'],
+  },
+  {
+    id: 'ret-life', area: 'retirement', tier: 1,
+    question: 'What does CPF LIFE give you?',
+    options: ['A lump sum at 55', 'Monthly payouts for life', 'Payouts until age 85 only'], answer: 1,
+    explain: 'CPF LIFE is Singapore’s national longevity insurance scheme: monthly payouts for as long as you live, from your payout age.',
+    sourceIds: ['moneysenseGoals', 'cpfPayoutAge'],
+  },
+  {
+    id: 'inv-10', area: 'investing', tier: 1,
+    question: 'MoneySense’s rule of thumb: invest at least what share of your income for retirement and other goals?',
+    options: ['1%', '10%', '50%'], answer: 1,
+    explain: 'At least 10% of income — after your emergency fund is in place.',
+    sourceIds: ['moneysenseBasics'],
+  },
+  {
+    id: 'house-downpayment', area: 'housing', tier: 2, stages: ['starting', 'settling'],
+    question: 'MoneySense lists an HDB BTO downpayment as a common goal in your 20s. It is typically what share of the price?',
+    options: ['1–5%', '10–20%', 'About 50%'], answer: 1,
+    explain: 'Typically 10–20% of the price. For short-term goals like this, MoneySense suggests low-risk, easy-to-reach options such as Singapore Savings Bonds or fixed deposits.',
+    sourceIds: ['moneysenseGoals'],
+  },
+  {
+    id: 'house-oa-buffer', area: 'housing', tier: 3, stages: ['starting', 'settling'],
+    question: 'When buying property, how much does MoneySense suggest keeping in your CPF Ordinary Account as a safety net?',
+    options: ['$5,000', '$20,000', '$60,000'], answer: 1,
+    explain: 'Keep $20,000 in your OA as a safety net, and plan to clear all debts, including the mortgage, by your target retirement age.',
+    sourceIds: ['moneysenseGoals'],
+  },
+  {
+    id: 'irr-good-month', area: 'irregular', tier: 1,
+    question: 'You usually earn $2,000 from gigs, but this month you made $4,000. What’s the smartest first move?',
+    options: ['Upgrade your phone — you earned it', 'Move a fixed share to savings before spending', 'Spend it; next month will be good too'], answer: 1,
+    explain: 'Good months pay for lean ones. Moving a fixed share to savings first smooths out irregular income.',
+  },
+  {
+    id: 'irr-cushion-calc', area: 'irregular', tier: 3,
+    question: 'Your gig income swings from $800 to $4,000 (average $2,400). Your costs are $1,800 a month. Roughly how big a cushion does MoneySense’s 12-month guide suggest?',
+    options: ['$9,600', '$21,600', '$28,800'], answer: 1,
+    explain: 'The cushion is based on expenses, not income: 12 × $1,800 = $21,600. (12 × your average income would be $28,800.)',
+    sourceIds: ['moneysenseEF'],
+  },
+  {
+    id: 'scam-fid', area: 'scams', tier: 3,
+    question: 'An investment app says it’s “licensed by MAS” and offers 8% a month. What’s the best check?',
+    options: ['The licence screenshot in the app', 'Search the MAS Financial Institutions Directory yourself', 'Ask the app’s agent for proof'], answer: 1,
+    explain: 'Check MAS’s own Financial Institutions Directory — scammers fake screenshots and “proof”. And 8% a month is a red flag on its own.',
+  },
+  {
+    id: 'cred-income', area: 'credit', tier: 2, stages: ['student', 'ns', 'starting'],
+    question: 'What minimum annual income do you need to get a credit card in Singapore?',
+    options: ['$12,000', '$30,000', '$60,000'], answer: 1,
+    explain: 'MAS rules set a minimum annual income of $30,000 for credit cards — so students usually can’t get a principal card yet.',
+    sourceIds: ['masCreditCards'],
+  },
+  {
+    id: 'cred-limit', area: 'credit', tier: 3,
+    question: 'You earn $36,000 a year. Under MAS rules, a bank can usually give you a credit limit of up to…',
+    options: ['$3,000', '$12,000', '$36,000'], answer: 1,
+    explain: 'Up to 4 months’ income for people earning $30,000 to under $120,000: 4 × $3,000 = $12,000.',
+    sourceIds: ['masCreditCards'],
+  },
+  {
+    id: 'save-deadline', area: 'saving', tier: 2,
+    question: 'MoneySense’s goal-setting framework: name the goal, set the target amount, and…',
+    options: ['Pick an investment product', 'Fix the date you need it by', 'Tell a friend'], answer: 1,
+    explain: 'Goal, amount, deadline. The deadline sets how much risk you can take. As MoneySense puts it, a goal without a date is just a wish.',
+    sourceIds: ['moneysenseGoals'],
+  },
+  {
+    id: 'save-enough', area: 'saving', tier: 1,
+    question: 'You save $300 a month towards a $10,000 goal in 3 years. Are you on track?',
+    options: ['Yes — about $10,800 in 3 years', 'No — you’d be short by about $2,000', 'No — it would take about 5 years'], answer: 0,
+    explain: '$300 × 36 months = $10,800, just above the $10,000 target.',
+  },
+
+  // ---------- Protection (insurance) ----------
+  {
+    id: 'pro-medishield', area: 'protection', tier: 1,
+    question: 'Who is covered by MediShield Life?',
+    options: ['Only people who buy it', 'All Singapore Citizens and PRs', 'Only people over 65'], answer: 1,
+    explain: 'MediShield Life is basic health insurance for all Singapore Citizens and PRs against large hospital bills, regardless of age or health.',
+    sourceIds: ['mohMediShield'],
+  },
+  {
+    id: 'pro-medisave', area: 'protection', tier: 1,
+    question: 'How are MediShield Life premiums usually paid?',
+    options: ['In cash only', 'From MediSave', 'From your Ordinary Account only'], answer: 1,
+    explain: 'Premiums can be fully paid with MediSave, so most people don’t pay cash for it.',
+    sourceIds: ['mohMediShield'],
+  },
+  {
+    id: 'pro-15', area: 'protection', tier: 2,
+    question: 'MoneySense’s rule of thumb: spend at most what share of your income on insurance protection?',
+    options: ['5%', '15%', '30%'], answer: 1,
+    explain: 'At most 15% of income on protection, so insurance doesn’t crowd out savings.',
+    sourceIds: ['moneysenseBasics'],
+  },
+  {
+    id: 'pro-dps', area: 'protection', tier: 2, stages: ['student', 'ns', 'starting'],
+    question: 'You make your first CPF contribution from a job at 23. What cover do you get automatically (subject to health)?',
+    options: ['A private Integrated Shield Plan', 'CPF’s Dependants’ Protection Scheme — term life cover', 'Nothing — you must buy everything yourself'], answer: 1,
+    explain: 'The Dependants’ Protection Scheme is extended automatically on your first CPF working contribution between 21 and 65. You can opt out.',
+    sourceIds: ['cpfDps'],
+  },
+  {
+    id: 'pro-dps-sum', area: 'protection', tier: 3,
+    question: 'Up to age 60, how much does CPF’s Dependants’ Protection Scheme pay out?',
+    options: ['$20,000', '$70,000', '$200,000'], answer: 1,
+    explain: '$70,000 until the policy year you turn 60, then $55,000 to 65. That helps your family get by for a while, but it’s far below MoneySense’s 9× income guide.',
+    sourceIds: ['cpfDps'],
+  },
+  {
+    id: 'pro-ci', area: 'protection', tier: 2,
+    question: 'MoneySense’s rule of thumb for critical illness cover is…',
+    options: ['1× annual income', '4× annual income', '9× annual income'], answer: 1,
+    explain: '4× annual income for critical illness. 9× is the guide for death and total permanent disability.',
+    sourceIds: ['moneysenseBasics'],
+  },
+  {
+    id: 'pro-9x', area: 'protection', tier: 3, stages: ['starting', 'settling'],
+    question: 'You earn $48,000 a year. Using MoneySense’s rule of thumb, how much death & total permanent disability cover is suggested?',
+    options: ['$48,000', '$192,000', '$432,000'], answer: 2,
+    explain: '9 × $48,000 = $432,000. ($192,000 is 4×, the critical illness guide.) Your needs depend on your dependants, so treat it as a check, not a target.',
+    sourceIds: ['moneysenseBasics'],
+  },
+
+  // ---------- Legacy planning ----------
+  {
+    id: 'leg-cpf-will', area: 'legacy', tier: 1,
+    question: 'Does your will decide who gets your CPF savings?',
+    options: ['Yes, like everything else', 'No — you need a CPF nomination', 'Only if you’re married'], answer: 1,
+    explain: 'CPF savings aren’t covered by a will. A CPF nomination decides who receives them.',
+    sourceIds: ['moneysenseWill', 'cpfLegacy'],
+  },
+  {
+    id: 'leg-lpa', area: 'legacy', tier: 1,
+    question: 'What does a Lasting Power of Attorney (LPA) do?',
+    options: ['Divides your assets after death', 'Lets people you trust decide for you if you lose mental capacity', 'Lowers your income tax'], answer: 1,
+    explain: 'An LPA appoints people you trust (donees) to make decisions on your personal welfare and property if you lose mental capacity.',
+    sourceIds: ['moneysenseLpa'],
+  },
+  {
+    id: 'leg-age', area: 'legacy', tier: 2,
+    question: 'How old must you be to make a will or an LPA in Singapore?',
+    options: ['18', '21', '30'], answer: 1,
+    explain: 'You must be 21 or older (and of sound mind) for both.',
+    sourceIds: ['moneysenseWill', 'moneysenseLpa'],
+  },
+  {
+    id: 'leg-no-lpa', area: 'legacy', tier: 2,
+    question: 'You lose mental capacity and have no LPA. What can your family do?',
+    options: ['Manage your bank accounts automatically', 'Apply to Court to be your deputy, which takes longer and costs more', 'Use your CPF freely'], answer: 1,
+    explain: 'Family members aren’t automatically allowed to decide for you. They must apply to Court for deputyship, which is slower and costs more than making an LPA.',
+    sourceIds: ['moneysenseLpa'],
+  },
+  {
+    id: 'leg-no-nomination', area: 'legacy', tier: 2,
+    question: 'Without a CPF nomination, what happens to your CPF savings when you pass on?',
+    options: ['They go to the government', 'The Public Trustee distributes them under intestacy laws, for a fee', 'Your employer decides'], answer: 1,
+    explain: 'The Public Trustee charges a statutory fee and distributes them under intestacy laws, which may not match your wishes.',
+    sourceIds: ['cpfLegacy'],
+  },
+  {
+    id: 'leg-marriage', area: 'legacy', tier: 3,
+    question: 'Which of these cancels an existing will in Singapore?',
+    options: ['Changing jobs', 'Getting married', 'Moving house'], answer: 1,
+    explain: 'A will is revoked when you marry or remarry, so make a new one after the wedding.',
+    sourceIds: ['moneysenseWill'],
+  },
+  {
+    id: 'leg-witness', area: 'legacy', tier: 3,
+    question: 'Who should NOT be a witness to your will?',
+    options: ['A colleague over 21', 'Someone who inherits under the will', 'A neighbour over 21'], answer: 1,
+    explain: 'You need two witnesses over 21, and they must not be beneficiaries (or their spouses).',
+    sourceIds: ['moneysenseWill'],
   },
 ];

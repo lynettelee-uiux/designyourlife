@@ -1,8 +1,9 @@
 // Game rules for Design Your Life (Sprint): a 60-second round, 5 hearts a day, levels earned by
-// points, difficulty that adapts within a round, and a diagnosis of weak money skills.
+// points, difficulty that adapts within a round, questions matched to life stage (or one chosen
+// topic), and a diagnosis of weak money skills.
 // Pure functions only, so the rules are testable; the UI owns timers and storage.
 
-import type { SkillId } from '../lite/literacy';
+import type { Area, Player, Relevance, Stage } from './areas';
 import type { Question, Tier } from './questions';
 
 export const MAX_HEARTS = 5;
@@ -27,7 +28,9 @@ export interface Progress {
   xp: number;
   /** Most correct answers in one timed sprint. */
   best: number;
-  stats: Partial<Record<SkillId, AreaStat>>;
+  stats: Partial<Record<Area, AreaStat>>;
+  /** Age and situation, asked once and editable. */
+  player?: Player;
   /** Local date (YYYY-MM-DD) the hearts belong to. */
   day: string;
   hearts: number;
@@ -47,7 +50,10 @@ export function loadProgress(now = new Date()): Progress {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Progress;
-      if (typeof p.xp === 'number' && typeof p.hearts === 'number') return forToday({ ...newProgress(now), ...p }, now);
+      if (typeof p.xp === 'number' && typeof p.hearts === 'number') {
+        const player = p.player && typeof p.player.age === 'number' && typeof p.player.situation === 'string' ? p.player : undefined;
+        return forToday({ ...newProgress(now), ...p, player }, now);
+      }
     }
   } catch {
     /* storage unavailable — play without saving */
@@ -84,17 +90,31 @@ export function nextTier(tier: Tier, right: boolean, streak: number): Tier {
   return tier;
 }
 
+/** What a round draws from: everything relevant to your stage (weighted), or a single topic. */
+export type Focus = { kind: 'mixed'; stage: Stage; weights: Record<Area, Relevance> } | { kind: 'topic'; area: Area };
+
+export function questionsFor(bank: Question[], focus: Focus): Question[] {
+  if (focus.kind === 'topic') return bank.filter((q) => q.area === focus.area);
+  return bank.filter((q) => focus.weights[q.area] > 0 && (!q.stages || q.stages.includes(focus.stage)));
+}
+
 /**
- * Picks the next question at (or nearest to) the tier, never repeating within a round.
- * It favours skills seen least in this round, so the diagnosis covers as many areas as possible.
+ * Picks the next question, never repeating within a round. First the skill: in mixed rounds, core
+ * skills for your stage come up about twice as often as "good to know" ones, and skills are spread
+ * out so the diagnosis covers as many as possible. Then the question nearest the current tier.
  */
-export function pickQuestion(bank: Question[], tier: Tier, asked: Set<string>, roundAreas: Partial<Record<SkillId, number>>, rand = Math.random): Question | undefined {
-  const fresh = bank.filter((q) => !asked.has(q.id));
+export function pickQuestion(bank: Question[], tier: Tier, asked: Set<string>, roundAreas: Partial<Record<Area, number>>, focus: Focus, rand = Math.random): Question | undefined {
+  const fresh = questionsFor(bank, focus).filter((q) => !asked.has(q.id));
   if (fresh.length === 0) return undefined;
-  const byDistance = [0, 1, 2].map((d) => fresh.filter((q) => Math.abs(q.tier - tier) === d)).find((xs) => xs.length > 0)!;
-  const least = Math.min(...byDistance.map((q) => roundAreas[q.area] ?? 0));
-  const pool = byDistance.filter((q) => (roundAreas[q.area] ?? 0) === least);
-  return pool[Math.floor(rand() * pool.length)];
+  // +1 so core skills lead from the very first question, rather than every skill getting one turn first.
+  const load = (a: Area) => ((roundAreas[a] ?? 0) + 1) / (focus.kind === 'mixed' ? focus.weights[a] : 1);
+  const areas = [...new Set(fresh.map((q) => q.area))];
+  const least = Math.min(...areas.map(load));
+  const tied = areas.filter((a) => load(a) === least);
+  const area = tied[Math.floor(rand() * tied.length)];
+  const inArea = fresh.filter((q) => q.area === area);
+  const nearest = [0, 1, 2].map((d) => inArea.filter((q) => Math.abs(q.tier - tier) === d)).find((xs) => xs.length > 0)!;
+  return nearest[Math.floor(rand() * nearest.length)];
 }
 
 export interface Answer {
@@ -113,7 +133,7 @@ export function addStats(stats: Progress['stats'], answers: Answer[]): Progress[
 }
 
 export interface AreaResult {
-  area: SkillId;
+  area: Area;
   right: number;
   seen: number;
   share: number;
@@ -124,7 +144,7 @@ export interface AreaResult {
  * Strong areas: at least 2 answered and 80%+ right.
  */
 export function diagnose(stats: Progress['stats']) {
-  const rows: AreaResult[] = (Object.entries(stats) as [SkillId, AreaStat][])
+  const rows: AreaResult[] = (Object.entries(stats) as [Area, AreaStat][])
     .filter(([, s]) => s.seen > 0)
     .map(([area, s]) => ({ area, right: s.right, seen: s.seen, share: s.right / s.seen }));
   const weak = rows.filter((r) => r.right < r.seen).sort((a, b) => a.share - b.share || b.seen - b.right - (a.seen - a.right));

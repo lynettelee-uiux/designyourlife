@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card, Icon, cx } from '../components/ui';
-import { SKILLS, type SkillId } from '../lite/literacy';
+import { Button, Card, Icon, Slider, cx } from '../components/ui';
 import { QUESTIONS, type Question, type Tier } from './questions';
+import { AREAS, AREA_ORDER, SITUATIONS, STAGE_INFO, relevance, stageOf, type Area, type Player, type Relevance } from './areas';
 import {
-  LEVELS, MAX_HEARTS, SPRINT_SECONDS, addStats, diagnose, levelOf, loadProgress, nextTier, pickQuestion, pointsFor, saveProgress, startTier,
-  type Answer, type Progress,
+  LEVELS, MAX_HEARTS, SPRINT_SECONDS, addStats, diagnose, levelOf, loadProgress, nextTier, pickQuestion, pointsFor, questionsFor, saveProgress, startTier,
+  type Answer, type Focus, type Progress,
 } from './game';
+import { SkillRadar, relChip } from './SkillRadar';
 
 type Mode = 'sprint' | 'practice';
 type Phase = 'home' | 'play' | 'results';
 
 interface Round {
   mode: Mode;
+  focus: Focus;
   answers: Answer[];
   asked: Set<string>;
-  areas: Partial<Record<SkillId, number>>;
+  areas: Partial<Record<Area, number>>;
   tier: Tier;
   streak: number;
   points: number;
@@ -28,40 +30,6 @@ interface Round {
 
 const TIER_LABEL: Record<Tier, string> = { 1: 'Easy', 2: 'Medium', 3: 'Hard' };
 
-/** Further reading for each skill: the skill's own official link plus related official tools. */
-const READINGS: Record<SkillId, { label: string; org: string; url: string }[]> = {
-  payslip: [
-    { label: 'CPF contribution rates', org: 'CPF Board', url: 'https://www.cpf.gov.sg/conrate2023' },
-    { label: 'Individual income tax basics', org: 'IRAS', url: 'https://www.iras.gov.sg/taxes/individual-income-tax' },
-  ],
-  budgeting: [{ label: 'Budgeting guides', org: 'MoneySense (MAS)', url: 'https://www.moneysense.gov.sg/' }],
-  emergency: [{ label: 'Emergency funds & financial planning', org: 'MoneySense (MAS)', url: 'https://www.moneysense.gov.sg/' }],
-  retirement: [
-    { label: 'What is the CPF retirement sum?', org: 'CPF Board', url: 'https://www.cpf.gov.sg/member/infohub/educational-resources/what-is-the-cpf-retirement-sum' },
-    { label: 'CPF payout estimator', org: 'CPF Board', url: 'https://www.cpf.gov.sg/payoutestimator' },
-  ],
-  investing: [{ label: 'Investing basics and risk', org: 'MoneySense (MAS)', url: 'https://www.moneysense.gov.sg/' }],
-  housing: [{ label: 'HDB Flat Portal — eligibility and grants', org: 'HDB', url: 'https://homes.hdb.gov.sg/' }],
-  irregular: [{ label: 'Planning with irregular income', org: 'MoneySense (MAS)', url: 'https://www.moneysense.gov.sg/' }],
-  scams: [{ label: 'ScamShield — check before you act', org: 'NCPC / SPF', url: 'https://www.scamshield.gov.sg/' }],
-  credit: [{ label: 'Credit cards and borrowing', org: 'MoneySense (MAS)', url: 'https://www.moneysense.gov.sg/' }],
-  saving: [{ label: 'Saving and budgeting', org: 'MoneySense (MAS)', url: 'https://www.moneysense.gov.sg/' }],
-};
-
-/** Where to practise each skill in the simulators. */
-const PRACTISE: Record<SkillId, { label: string; href: string }> = {
-  payslip: { label: 'See your take-home and CPF in the full version', href: '../' },
-  retirement: { label: 'Try “retire early” in the full version', href: '../' },
-  housing: { label: 'Try “own a home” in the full version', href: '../' },
-  budgeting: { label: 'Play a few life moments in Lite', href: '../lite/' },
-  emergency: { label: 'Play a few life moments in Lite', href: '../lite/' },
-  investing: { label: 'Play a few life moments in Lite', href: '../lite/' },
-  irregular: { label: 'Play Lite as a freelancer', href: '../lite/' },
-  scams: { label: 'Play a few life moments in Lite', href: '../lite/' },
-  credit: { label: 'Play a few life moments in Lite', href: '../lite/' },
-  saving: { label: 'Play a few life moments in Lite', href: '../lite/' },
-};
-
 function beatTarget(): number | undefined {
   try {
     const n = Number(new URLSearchParams(window.location.search).get('beat'));
@@ -71,10 +39,13 @@ function beatTarget(): number | undefined {
   }
 }
 
+const focusFor = (player: Player, topic: Area | null): Focus => (topic ? { kind: 'topic', area: topic } : { kind: 'mixed', stage: stageOf(player), weights: relevance(player) });
+
 export default function ChallengeApp() {
   const [progress, setProgressState] = useState<Progress>(() => loadProgress());
   const [phase, setPhase] = useState<Phase>('home');
   const [round, setRound] = useState<Round | null>(null);
+  const [topic, setTopic] = useState<Area | null>(null);
   const beat = useMemo(beatTarget, []);
 
   const setProgress = useCallback((p: Progress) => {
@@ -90,18 +61,20 @@ export default function ChallengeApp() {
     h?.focus({ preventScroll: true });
   }, [phase]);
 
-  const start = (mode: Mode) => {
-    const tier = startTier(levelOf(progress.xp).index);
-    const r: Round = { mode, answers: [], asked: new Set(), areas: {}, tier, streak: 0, points: 0, msLeft: SPRINT_SECONDS * 1000, before: { xp: progress.xp, best: progress.best } };
-    r.current = pickQuestion(QUESTIONS, tier, r.asked, r.areas);
+  const start = (mode: Mode, area: Area | null = topic) => {
+    if (!progress.player) return;
+    const focus = focusFor(progress.player, area);
+    const tier = focus.kind === 'topic' ? 1 : startTier(levelOf(progress.xp).index);
+    const r: Round = { mode, focus, answers: [], asked: new Set(), areas: {}, tier, streak: 0, points: 0, msLeft: SPRINT_SECONDS * 1000, before: { xp: progress.xp, best: progress.best } };
+    r.current = pickQuestion(QUESTIONS, tier, r.asked, r.areas, focus);
+    setTopic(area);
     setRound(r);
     setPhase('play');
   };
 
   const finish = useCallback(
     (r: Round, endedBy: Round['endedBy']) => {
-      const ended = { ...r, endedBy };
-      setRound(ended);
+      setRound({ ...r, endedBy });
       const right = r.answers.filter((a) => a.right).length;
       const p = { ...progress, stats: addStats(progress.stats, r.answers) };
       if (r.mode === 'sprint') {
@@ -136,7 +109,7 @@ export default function ChallengeApp() {
       </header>
 
       <main id="main" className="mx-auto w-full max-w-xl px-4 pb-16 pt-4">
-        {phase === 'home' && <Home progress={progress} beat={beat} onStart={start} />}
+        {phase === 'home' && <Home progress={progress} setProgress={setProgress} beat={beat} topic={topic} setTopic={setTopic} onStart={start} />}
         {phase === 'play' && round && <Play round={round} setRound={setRound} progress={progress} setProgress={setProgress} onFinish={finish} />}
         {phase === 'results' && round && <Results round={round} progress={progress} beat={beat} onAgain={start} onHome={() => setPhase('home')} />}
       </main>
@@ -188,9 +161,64 @@ function untilTomorrow() {
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
 }
 
-function Home({ progress, beat, onStart }: { progress: Progress; beat?: number; onStart: (m: Mode) => void }) {
+// ---------------------------------------------------------------------------------------------
+
+/** Step 1: who you are, so questions and the skill map fit your stage. Asked once, editable. */
+function PlayerSetup({ initial, onSave, onCancel }: { initial?: Player; onSave: (p: Player) => void; onCancel?: () => void }) {
+  const [age, setAge] = useState(initial?.age ?? 22);
+  const [situation, setSituation] = useState(initial?.situation);
+  return (
+    <Card className="pop p-5">
+      <h2 className="display text-xl">First, a little about you</h2>
+      <p className="mt-1 text-sm text-ink-mute">We’ll match questions to your life stage, using MoneySense’s life-stage guidance.</p>
+      <div className="mt-4">
+        <Slider label="Your age" value={age} min={17} max={35} onChange={setAge} />
+      </div>
+      <fieldset className="mt-4">
+        <legend className="text-sm font-medium text-ink-soft">Right now I’m…</legend>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {SITUATIONS.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              aria-pressed={situation === s.value}
+              onClick={() => setSituation(s.value)}
+              className={cx('flex min-h-[48px] items-center gap-2 rounded-2xl border px-3 text-left text-sm font-semibold', situation === s.value ? 'border-navy-800 bg-navy-50' : 'border-mist-300 bg-white hover:border-ink-soft')}
+            >
+              <Icon name={s.icon} className="h-4 w-4 shrink-0" />
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Button iconRight="ArrowRight" disabled={!situation} onClick={() => situation && onSave({ age, situation })}>
+          {initial ? 'Save' : 'Show my challenge'}
+        </Button>
+        {onCancel && (
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function Home({
+  progress, setProgress, beat, topic, setTopic, onStart,
+}: {
+  progress: Progress;
+  setProgress: (p: Progress) => void;
+  beat?: number;
+  topic: Area | null;
+  setTopic: (a: Area | null) => void;
+  onStart: (m: Mode, area?: Area | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
   const out = progress.hearts <= 0;
-  const d = diagnose(progress.stats);
+  const player = progress.player;
+
   return (
     <>
       <section className="rise relative mb-5 overflow-hidden rounded-[28px] bg-gradient-to-br from-navy-800 via-[#2F1A6E] to-magenta-600 p-5 text-white">
@@ -220,79 +248,194 @@ function Home({ progress, beat, onStart }: { progress: Progress; beat?: number; 
         </p>
       )}
 
-      <Card className="rise-2 p-5">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-ink-soft">Today</span>
-          <Hearts n={progress.hearts} />
-        </div>
-        <div className="mt-4">
-          <LevelBar xp={progress.xp} />
-        </div>
-        {progress.best > 0 && (
-          <p className="mt-3 flex items-center gap-1.5 text-sm text-ink-soft">
-            <Icon name="Trophy" className="h-4 w-4 text-[#C98A2B]" /> Personal best: <strong className="text-ink">{progress.best} right</strong> in one sprint
-          </p>
-        )}
-        {out ? (
-          <div className="mt-4 rounded-2xl bg-mist-100 p-4 text-sm">
-            <p className="flex items-center gap-2 font-semibold">
-              <Icon name="HeartCrack" className="h-4 w-4 text-magenta-600" /> Out of hearts for today
-            </p>
-            <p className="mt-1 text-ink-soft">5 new hearts in {untilTomorrow()}. Meanwhile, practise without a timer or hearts — or read up on your weak spots below.</p>
-          </div>
-        ) : null}
-        <div className="mt-5 grid gap-2">
-          <Button variant="accent" icon={out ? 'Clock' : 'Zap'} disabled={out} className="disabled:bg-mist-200 disabled:text-ink-mute" onClick={() => onStart('sprint')}>
-            {out ? 'Come back tomorrow' : 'Start a 60-second sprint'}
-          </Button>
-          <Button variant="secondary" icon="BookOpen" onClick={() => onStart('practice')}>
-            Practice — no timer, no hearts
-          </Button>
-        </div>
-      </Card>
+      {!player || editing ? (
+        <PlayerSetup
+          initial={player}
+          onSave={(p) => {
+            setProgress({ ...progress, player: p });
+            setEditing(false);
+          }}
+          onCancel={player ? () => setEditing(false) : undefined}
+        />
+      ) : (
+        <>
+          <Card className="rise-2 p-5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm">
+                <span className="font-semibold">
+                  {player.age} · {SITUATIONS.find((s) => s.value === player.situation)?.label}
+                </span>
+                <span className="text-ink-mute"> · {STAGE_INFO[stageOf(player)].label}</span>
+              </p>
+              <button type="button" onClick={() => setEditing(true)} className="text-sm font-semibold text-navy-700 underline-offset-4 hover:underline">
+                Edit
+              </button>
+            </div>
+            <div className="mt-4 flex items-center justify-between border-t border-mist-200 pt-4">
+              <span className="text-sm font-semibold text-ink-soft">Today</span>
+              <Hearts n={progress.hearts} />
+            </div>
+            <div className="mt-4">
+              <LevelBar xp={progress.xp} />
+            </div>
+            {progress.best > 0 && (
+              <p className="mt-3 flex items-center gap-1.5 text-sm text-ink-soft">
+                <Icon name="Trophy" className="h-4 w-4 text-[#C98A2B]" /> Personal best: <strong className="text-ink">{progress.best} right</strong> in one sprint
+              </p>
+            )}
+          </Card>
 
-      {d.rows.length > 0 && (
-        <section className="rise-3 mt-6" aria-labelledby="map-h">
-          <h2 id="map-h" className="display text-xl">Your skill map</h2>
-          <p className="mt-1 text-sm text-ink-mute">From every round you’ve played on this device.</p>
-          <SkillMap rows={d.rows} />
-        </section>
+          <ChooseChallenge player={player} topic={topic} setTopic={setTopic} />
+
+          {out && (
+            <div className="mt-4 rounded-2xl bg-mist-100 p-4 text-sm">
+              <p className="flex items-center gap-2 font-semibold">
+                <Icon name="HeartCrack" className="h-4 w-4 text-magenta-600" /> Out of hearts for today
+              </p>
+              <p className="mt-1 text-ink-soft">5 new hearts in {untilTomorrow()}. Meanwhile, practise without a timer or hearts — or read up on your skill map below.</p>
+            </div>
+          )}
+          <div className="mt-4 grid gap-2">
+            <Button variant="accent" icon={out ? 'Clock' : 'Zap'} disabled={out} className="disabled:bg-mist-200 disabled:text-ink-mute" onClick={() => onStart('sprint')}>
+              {out ? 'Come back tomorrow' : topic ? `Start a 60-second ${AREAS[topic].axis.toLowerCase()} sprint` : 'Start a 60-second sprint'}
+            </Button>
+            <Button variant="secondary" icon="BookOpen" onClick={() => onStart('practice')}>
+              Practice — no timer, no hearts
+            </Button>
+          </div>
+
+          <SkillMapSection player={player} stats={progress.stats} onPractise={(a) => onStart('practice', a)} />
+        </>
       )}
 
       <p className="mt-6 text-center text-xs leading-relaxed text-ink-mute">
-        Progress is kept only in this browser — nothing is sent or saved anywhere else. Questions use public Singapore sources (CPF, IRAS, HDB, MAS MoneySense, SPF); some prices are illustrative and say so.
+        Progress is kept only in this browser — nothing is sent or saved anywhere else. Questions use public Singapore sources, MoneySense first (with CPF, IRAS, HDB, MOH, MAS and SPF); some prices are illustrative and say so.
       </p>
     </>
   );
 }
 
-function SkillMap({ rows }: { rows: { area: SkillId; right: number; seen: number; share: number }[] }) {
+/** Mixed questions for your stage, or one topic of your choice. */
+function ChooseChallenge({ player, topic, setTopic }: { player: Player; topic: Area | null; setTopic: (a: Area | null) => void }) {
+  const rel = relevance(player);
+  const order = [...AREA_ORDER].sort((a, b) => rel[b] - rel[a]);
   return (
-    <ul className="mt-3 space-y-2">
-      {rows.map((r) => (
-        <li key={r.area} className="rounded-2xl bg-white p-3 shadow-card">
-          <div className="flex items-center justify-between gap-2 text-sm">
-            <span className="flex items-center gap-2 font-semibold">
-              <Icon name={SKILLS[r.area].icon} className="h-4 w-4 text-navy-700" />
-              {SKILLS[r.area].title}
-            </span>
-            <span className="shrink-0 text-xs font-semibold text-ink-mute">
-              {r.right} of {r.seen}
-            </span>
+    <section className="rise-3 mt-5" aria-labelledby="choose-h">
+      <h2 id="choose-h" className="display text-xl">Choose your challenge</h2>
+      <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label="Challenge type">
+        {[
+          { v: null, icon: 'Shuffle', t: 'For my stage', d: 'Mixed, weighted to what matters now' },
+          { v: topic ?? 'pick', icon: 'Target', t: 'Pick a topic', d: 'Every question on one skill' },
+        ].map((o) => {
+          const on = o.v === null ? topic === null : topic !== null;
+          return (
+            <button
+              key={o.t}
+              type="button"
+              aria-pressed={on}
+              onClick={() => setTopic(o.v === null ? null : topic ?? order[0])}
+              className={cx('rounded-2xl border p-3 text-left', on ? 'border-navy-800 bg-white shadow-card' : 'border-mist-200 bg-white/60 hover:border-ink-soft')}
+            >
+              <Icon name={o.icon} className="h-5 w-5 text-navy-700" />
+              <span className="mt-1 block text-sm font-semibold">{o.t}</span>
+              <span className="block text-xs text-ink-mute">{o.d}</span>
+            </button>
+          );
+        })}
+      </div>
+      {topic && (
+        <div className="pop mt-3">
+          <p className="text-xs font-semibold text-ink-mute">Topics, most relevant to you first</p>
+          <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Topic">
+            {order.map((a) => (
+              <button
+                key={a}
+                type="button"
+                aria-pressed={topic === a}
+                onClick={() => setTopic(a)}
+                className={cx('inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-3 text-sm font-semibold', topic === a ? 'border-navy-800 bg-navy-800 text-white' : 'border-mist-300 bg-white hover:border-ink-soft')}
+              >
+                <Icon name={AREAS[a].icon} className="h-4 w-4" />
+                {AREAS[a].axis}
+                {rel[a] === 2 && <span className={cx('h-1.5 w-1.5 rounded-full', topic === a ? 'bg-magenta-300' : 'bg-magenta-500')} aria-label="core for your stage" />}
+              </button>
+            ))}
           </div>
-          <div className="mt-2 h-1.5 rounded-full bg-mist-100" aria-hidden>
-            <div className={cx('h-1.5 rounded-full', r.share >= 0.8 ? 'bg-sage-600' : r.share >= 0.5 ? 'bg-[#C98A2B]' : 'bg-magenta-500')} style={{ width: `${Math.max(6, r.share * 100)}%` }} />
-          </div>
-          {r.share < 0.8 && (
-            <a href={READINGS[r.area][0].url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-navy-700 underline-offset-4 hover:underline">
-              Read up: {READINGS[r.area][0].label} · {READINGS[r.area][0].org}
-              <Icon name="ExternalLink" className="h-3 w-3" />
-              <span className="sr-only">(opens in a new tab)</span>
-            </a>
-          )}
-        </li>
-      ))}
-    </ul>
+          <p className="mt-2 text-xs text-ink-mute">
+            <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-magenta-500 align-middle" aria-hidden /> Core for your stage · {questionsFor(QUESTIONS, { kind: 'topic', area: topic }).length} questions on {AREAS[topic].axis.toLowerCase()}
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** What to know at your age: the spider diagram plus the same information as a list. */
+function SkillMapSection({ player, stats, onPractise, compact }: { player: Player; stats: Progress['stats']; onPractise?: (a: Area) => void; compact?: boolean }) {
+  const rel = relevance(player);
+  const stage = stageOf(player);
+  const groups: { r: Relevance; title: string }[] = [
+    { r: 2, title: 'Core for you now' },
+    { r: 1, title: 'Good to know' },
+    { r: 0, title: 'Coming up later' },
+  ];
+  return (
+    <section className="mt-8" aria-labelledby="map-h">
+      <h2 id="map-h" className="display text-xl">
+        What to know at {player.age}
+      </h2>
+      <p className="mt-1 text-sm leading-relaxed text-ink-soft">{STAGE_INFO[stage].focus}</p>
+      <Card className="mt-3 p-4">
+        <SkillRadar rel={rel} stats={stats} />
+      </Card>
+      {!compact && (
+        <div className="mt-4 space-y-4">
+          {groups.map((g) => {
+            const areas = AREA_ORDER.filter((a) => rel[a] === g.r);
+            if (!areas.length) return null;
+            return (
+              <div key={g.r}>
+                <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-ink-mute">{g.title}</h3>
+                <ul className="mt-2 space-y-2">
+                  {areas.map((a) => {
+                    const s = stats[a];
+                    const share = s && s.seen ? s.right / s.seen : undefined;
+                    return (
+                      <li key={a} className="rounded-2xl bg-white p-3 shadow-card">
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                          <span className="flex min-w-0 items-center gap-2 font-semibold">
+                            <Icon name={AREAS[a].icon} className="h-4 w-4 shrink-0 text-navy-700" />
+                            <span className="truncate">{AREAS[a].title}</span>
+                          </span>
+                          <span className="shrink-0 text-xs font-semibold text-ink-mute">{s?.seen ? `${s.right} of ${s.seen}` : 'Not tried'}</span>
+                        </div>
+                        <div className="mt-2 h-1.5 rounded-full bg-mist-100" aria-hidden>
+                          {share !== undefined && <div className={cx('h-1.5 rounded-full', share >= 0.8 ? 'bg-sage-600' : share >= 0.5 ? 'bg-[#C98A2B]' : 'bg-magenta-500')} style={{ width: `${Math.max(6, share * 100)}%` }} />}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          {onPractise && (
+                            <button type="button" onClick={() => onPractise(a)} className="text-xs font-semibold text-magenta-700 underline-offset-4 hover:underline">
+                              Practise this topic
+                            </button>
+                          )}
+                          {(share === undefined || share < 0.8) && (
+                            <a href={AREAS[a].readings[0].url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-navy-700 underline-offset-4 hover:underline">
+                              Read: {AREAS[a].readings[0].label} · {AREAS[a].readings[0].org}
+                              <Icon name="ExternalLink" className="h-3 w-3" />
+                              <span className="sr-only">(opens in a new tab)</span>
+                            </a>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -351,7 +494,7 @@ function Play({
   const next = () => {
     if (outOfHearts) return onFinish(round, 'hearts');
     const tier = nextTier(round.tier, round.answers[round.answers.length - 1].right, round.streak);
-    const current = pickQuestion(QUESTIONS, tier, round.asked, round.areas);
+    const current = pickQuestion(QUESTIONS, tier, round.asked, round.areas, round.focus);
     if (!current) return onFinish(round, 'questions');
     setRound({ ...round, tier, current, chosen: undefined });
   };
@@ -371,6 +514,7 @@ function Play({
 
   const secs = Math.ceil(round.msLeft / 1000);
   const last = round.answers[round.answers.length - 1];
+  const total = questionsFor(QUESTIONS, round.focus).length;
 
   return (
     <>
@@ -395,14 +539,19 @@ function Play({
             <div className={cx('h-1.5 rounded-full transition-[width] duration-200 ease-linear', secs <= 10 ? 'bg-magenta-500' : 'bg-navy-800')} style={{ width: `${(round.msLeft / (SPRINT_SECONDS * 1000)) * 100}%` }} />
           </div>
         )}
+        {round.focus.kind === 'topic' && (
+          <p className="mt-1.5 text-xs text-ink-mute">
+            Topic: <strong className="text-ink-soft">{AREAS[round.focus.area].title}</strong> · question {round.answers.length + (answering ? 1 : 0)} of {total}
+          </p>
+        )}
         <p className="sr-only" aria-live="assertive">{announce}</p>
       </div>
 
       <section key={q.id} className="pop" aria-labelledby="q-h">
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
           <span className="inline-flex items-center gap-1 rounded-full bg-navy-50 px-2.5 py-1 text-navy-800">
-            <Icon name={SKILLS[q.area].icon} className="h-3.5 w-3.5" />
-            {SKILLS[q.area].short}
+            <Icon name={AREAS[q.area].icon} className="h-3.5 w-3.5" />
+            {AREAS[q.area].axis}
           </span>
           <span className={cx('rounded-full px-2.5 py-1', q.tier === 3 ? 'bg-magenta-100 text-magenta-700' : q.tier === 2 ? 'bg-[#FBEFD9] text-[#8A5A12]' : 'bg-sage-100 text-sage-700')}>
             {TIER_LABEL[q.tier]} · {pointsFor(q.tier, 0)} pts
@@ -473,7 +622,7 @@ function Play({
 
 // ---------------------------------------------------------------------------------------------
 
-function Results({ round, progress, beat, onAgain, onHome }: { round: Round; progress: Progress; beat?: number; onAgain: (m: Mode) => void; onHome: () => void }) {
+function Results({ round, progress, beat, onAgain, onHome }: { round: Round; progress: Progress; beat?: number; onAgain: (m: Mode, area?: Area | null) => void; onHome: () => void }) {
   const sprint = round.mode === 'sprint';
   const right = round.answers.filter((a) => a.right).length;
   const before = levelOf(round.before.xp);
@@ -482,13 +631,17 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
   const newBest = sprint && right > round.before.best && right > 0;
   const thisRound = diagnose(addStats({}, round.answers));
   const allTime = diagnose(progress.stats);
-  // Recommendations: this round's weak spots first, then all-time ones.
-  const weak = [...thisRound.weak, ...allTime.weak.filter((w) => !thisRound.weak.some((t) => t.area === w.area))].slice(0, 3);
+  const rel = progress.player ? relevance(progress.player) : undefined;
+  // Recommendations: this round's weak spots first, then all-time ones; core skills for your stage break ties.
+  const weak = [...thisRound.weak, ...allTime.weak.filter((w) => !thisRound.weak.some((t) => t.area === w.area))]
+    .slice(0, 3)
+    .sort((a, b) => a.share - b.share || (rel ? rel[b.area] - rel[a.area] : 0));
   const strong = (thisRound.strong.length ? thisRound.strong : allTime.strong).slice(0, 3);
+  const topicArea = round.focus.kind === 'topic' ? round.focus.area : null;
   const [shared, setShared] = useState('');
 
   const headline =
-    round.endedBy === 'hearts' ? 'Out of hearts!' : round.endedBy === 'time' ? 'Time’s up!' : round.endedBy === 'questions' ? 'You answered every question!' : 'Practice done';
+    round.endedBy === 'hearts' ? 'Out of hearts!' : round.endedBy === 'time' ? 'Time’s up!' : round.endedBy === 'questions' ? (topicArea ? `You answered every ${AREAS[topicArea].axis.toLowerCase()} question!` : 'You answered every question!') : 'Practice done';
 
   const link = `${window.location.origin}${window.location.pathname}?beat=${right}`;
   const message = `I got ${right} right in a 60-second Design Your Life money sprint. Can you beat it?`;
@@ -517,6 +670,7 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
         <h1 className="display mt-2 text-[34px] leading-tight text-white">
           {right} right{sprint ? ` in ${secondsLabel(SPRINT_SECONDS - round.msLeft / 1000)}` : ` of ${round.answers.length}`}
         </h1>
+        {topicArea && <p className="mt-1 text-sm text-navy-100">Topic: {AREAS[topicArea].title}</p>}
         {sprint && <p className="mt-1 text-navy-100">+{round.points} points</p>}
         <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs font-bold">
           {levelledUp && <span className="rounded-full bg-white px-3 py-1 text-magenta-700">Level up! You’re now a {after.name}</span>}
@@ -542,41 +696,46 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
         ) : (
           <ul className="mt-3 space-y-3">
             {weak.map((w) => {
-              const s = SKILLS[w.area];
-              const readings = [...READINGS[w.area], { label: s.learnMore.label, org: '', url: s.learnMore.url }].filter((x, i, a) => a.findIndex((y) => y.url === x.url) === i);
+              const s = AREAS[w.area];
               return (
                 <li key={w.area}>
                   <Card className="p-4">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="flex items-center gap-2 font-semibold">
-                        <span className="grid h-8 w-8 place-items-center rounded-xl bg-magenta-50 text-magenta-700">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-magenta-50 text-magenta-700">
                           <Icon name={s.icon} className="h-4 w-4" />
                         </span>
                         {s.title}
                       </h3>
-                      <span className="shrink-0 rounded-full bg-mist-100 px-2 py-0.5 text-xs font-semibold text-ink-soft">
-                        {w.right} of {w.seen} right
+                      <span className="flex shrink-0 flex-col items-end gap-1">
+                        <span className="rounded-full bg-mist-100 px-2 py-0.5 text-xs font-semibold text-ink-soft">
+                          {w.right} of {w.seen} right
+                        </span>
+                        {rel && relChip(rel[w.area])}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm leading-relaxed text-ink-soft">{s.facts[0]}</p>
+                    <p className="mt-2 text-sm leading-relaxed text-ink-soft">{s.fact}</p>
                     <p className="mt-2 rounded-2xl bg-mist-50 p-3 text-sm">
                       <strong>Try this week:</strong> {s.tip}
                     </p>
                     <p className="mt-3 text-xs font-bold uppercase tracking-[0.12em] text-ink-mute">Read & use</p>
                     <ul className="mt-1 space-y-1">
-                      {readings.map((r) => (
+                      {s.readings.map((r) => (
                         <li key={r.url + r.label}>
                           <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-navy-700 underline-offset-4 hover:underline">
                             {r.label}
-                            {r.org && <span className="font-normal text-ink-mute"> · {r.org}</span>}
+                            <span className="font-normal text-ink-mute"> · {r.org}</span>
                             <Icon name="ExternalLink" className="h-3.5 w-3.5" />
                             <span className="sr-only">(opens in a new tab)</span>
                           </a>
                         </li>
                       ))}
-                      <li>
-                        <a href={PRACTISE[w.area].href} className="inline-flex items-center gap-1 text-sm font-semibold text-magenta-700 underline-offset-4 hover:underline">
-                          {PRACTISE[w.area].label}
+                      <li className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
+                        <button type="button" onClick={() => onAgain('practice', w.area)} className="inline-flex items-center gap-1 text-sm font-semibold text-magenta-700 underline-offset-4 hover:underline">
+                          Practise this topic <Icon name="ArrowRight" className="h-3.5 w-3.5" />
+                        </button>
+                        <a href={s.practise.href} className="inline-flex items-center gap-1 text-sm font-semibold text-magenta-700 underline-offset-4 hover:underline">
+                          {s.practise.label}
                           <Icon name="ArrowRight" className="h-3.5 w-3.5" />
                         </a>
                       </li>
@@ -595,13 +754,15 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
           <ul className="mt-3 flex flex-wrap gap-2">
             {strong.map((s) => (
               <li key={s.area} className="inline-flex items-center gap-1.5 rounded-full bg-sage-100 px-3 py-1.5 text-sm font-semibold text-sage-700">
-                <Icon name={SKILLS[s.area].icon} className="h-4 w-4" />
-                {SKILLS[s.area].short}
+                <Icon name={AREAS[s.area].icon} className="h-4 w-4" />
+                {AREAS[s.area].axis}
               </li>
             ))}
           </ul>
         </section>
       )}
+
+      {progress.player && <SkillMapSection player={progress.player} stats={progress.stats} compact />}
 
       {round.answers.length > 0 && (
         <section className="mt-6" aria-labelledby="review-h">
@@ -626,11 +787,11 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
 
       <div className="mt-8 grid gap-2">
         {progress.hearts > 0 ? (
-          <Button variant="accent" icon="Zap" onClick={() => onAgain('sprint')}>
-            Another sprint
+          <Button variant="accent" icon="Zap" onClick={() => onAgain('sprint', topicArea)}>
+            {topicArea ? `Another ${AREAS[topicArea].axis.toLowerCase()} sprint` : 'Another sprint'}
           </Button>
         ) : (
-          <Button variant="secondary" icon="BookOpen" onClick={() => onAgain('practice')}>
+          <Button variant="secondary" icon="BookOpen" onClick={() => onAgain('practice', topicArea)}>
             Keep practising — no timer, no hearts
           </Button>
         )}
@@ -663,6 +824,11 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
   );
 }
 
+const secondsLabel = (s: number) => {
+  const n = Math.max(1, Math.round(s));
+  return `${n} second${n === 1 ? '' : 's'}`;
+};
+
 /** Copies text, falling back to a hidden textarea where the Clipboard API isn't allowed. */
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -685,8 +851,3 @@ async function copyText(text: string): Promise<boolean> {
     }
   }
 }
-
-const secondsLabel = (s: number) => {
-  const n = Math.max(1, Math.round(s));
-  return `${n} second${n === 1 ? '' : 's'}`;
-};
