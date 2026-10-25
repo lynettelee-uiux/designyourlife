@@ -446,6 +446,8 @@ function Compare({ player, progress, onPractise }: { player: Player; progress: P
         </div>
       )}
 
+      <CheckOut groups={focus.length ? focus : GROUPS.filter((g) => rel[g.id] === 2).map((g) => g.id)} behind={focus.length > 0} />
+
       <details className="group mt-4">
         <summary className="sp-link inline-flex cursor-pointer items-center gap-1 text-sm">
           This week’s leaderboard <Icon name="ChevronDown" className="h-4 w-4 transition-transform group-open:rotate-180" />
@@ -453,6 +455,64 @@ function Compare({ player, progress, onPractise }: { player: Player; progress: P
         <Leaderboard rows={board} />
       </details>
     </section>
+  );
+}
+
+/** "You may want to check out…": readings and tools for the areas to work on, MoneySense first, one tap away. */
+function CheckOut({ groups, behind }: { groups: GroupId[]; behind: boolean }) {
+  const seen = new Set<string>(); // each reading appears once, under the first area that needs it
+  const items = groups.flatMap((id) => {
+    const g = groupById(id);
+    const links = g.areas
+      .flatMap((a) => AREAS[a].readings)
+      .sort((a, b) => Number(b.org.includes('MoneySense')) - Number(a.org.includes('MoneySense')))
+      .filter((r) => !seen.has(r.url) && seen.add(r.url))
+      .slice(0, 3);
+    return [{ g, links, practise: AREAS[g.areas[0]].practise }];
+  });
+  if (!items.length) return null;
+  return (
+    <details className="sp-card group mt-5">
+      <summary className="flex min-h-[56px] cursor-pointer items-center gap-3 px-5 py-3">
+        <Icon name="BookOpen" className="h-5 w-5 text-sp-blue" />
+        <span className="flex-1">
+          <span className="block text-sm font-semibold">You may want to check out…</span>
+          <span className="block text-xs text-sp-mute">{behind ? 'Readings and tools for the areas to catch up on' : 'Readings and tools for what matters at your stage'}</span>
+        </span>
+        <Icon name="ChevronDown" className="h-4 w-4 text-sp-mute transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="space-y-4 px-5 pb-5">
+        {items.map(({ g, links, practise }) => (
+          <div key={g.id}>
+            <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-sp-mute">
+              <Icon name={g.icon} className="h-3.5 w-3.5" />
+              {g.title}
+            </h4>
+            <ul className="mt-2 space-y-1.5">
+              {links.map((r) => (
+                <li key={r.url + r.label}>
+                  <a href={r.url} target="_blank" rel="noreferrer" className="group/link flex items-start gap-2 rounded-xl bg-white/5 px-3 py-2.5 text-sm hover:bg-white/10">
+                    <span className="flex-1">
+                      <span className="font-semibold text-white">{r.label}</span>
+                      <span className="block text-xs text-sp-mute">{r.org}</span>
+                    </span>
+                    <Icon name="ExternalLink" className="mt-0.5 h-4 w-4 shrink-0 text-sp-blue" />
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </a>
+                </li>
+              ))}
+              <li>
+                <a href={practise.href} className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-sp-pink hover:bg-white/5">
+                  <Icon name="Sparkles" className="h-4 w-4" />
+                  <span className="flex-1">{practise.label}</span>
+                  <Icon name="ArrowRight" className="h-4 w-4" />
+                </a>
+              </li>
+            </ul>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
