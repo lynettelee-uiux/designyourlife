@@ -20,6 +20,29 @@
   .display { @apply font-display font-extrabold tracking-[-0.02em]; }
   .muted { @apply text-ink-mute; }
   .tabular { font-variant-numeric: tabular-nums; }
+
+  /* ---- Sprint: dark "game mode" (only on challenge/index.html, via <body class="sp">) ---- */
+  .sp {
+    background:
+      radial-gradient(900px 520px at -10% -8%, rgba(47, 91, 234, 0.32), transparent 60%),
+      radial-gradient(760px 480px at 115% 30%, rgba(212, 20, 114, 0.22), transparent 60%),
+      #120D3A;
+    background-attachment: fixed;
+    color: #fff;
+  }
+  .sp h1, .sp h2, .sp h3 { color: #fff; }
+  .sp :focus-visible { outline-color: #FFC857; }
+  .sp ::selection { background: #D41472; color: #fff; }
+  .sp-title { @apply font-grotesk font-bold tracking-[-0.02em]; }
+  .sp-card { @apply rounded-3xl border border-white/10 bg-sp-card; }
+  /* Chunky, tactile controls: a thicker bottom edge that presses down */
+  .sp-btn { @apply inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-sp-pink-fill px-5 font-bold text-white transition-transform; box-shadow: 0 5px 0 #7E0A44; }
+  .sp-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #7E0A44; }
+  .sp-btn-blue { @apply sp-btn bg-sp-blue-fill; box-shadow: 0 5px 0 #1B3BA8; }
+  .sp-btn-blue:active { box-shadow: 0 2px 0 #1B3BA8; }
+  .sp-tile { @apply rounded-2xl border-2 border-b-4 border-white/15 bg-sp-card text-white transition-colors; }
+  .sp-tile:hover { @apply border-white/30; }
+  .sp-link { @apply font-semibold text-sp-blue underline-offset-4 hover:underline; }
 }
 
 /* Range input styling (keeps native semantics & keyboard support) */

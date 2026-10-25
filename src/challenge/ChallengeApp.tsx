@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card, Icon, Slider, cx } from '../components/ui';
+import { Icon, cx } from '../components/ui';
 import { QUESTIONS, type Question, type Tier } from './questions';
-import { AREAS, GROUPS, SITUATIONS, STAGE_INFO, groupById, groupOf, groupRelevance, relevance, stageOf, type Area, type GroupId, type Player, type Relevance } from './areas';
+import { AREAS, GROUPS, SITUATIONS, STAGE_INFO, groupById, groupRelevance, relevance, stageOf, type Area, type GroupId, type Player, type Relevance } from './areas';
 import {
-  LEVELS, MAX_HEARTS, SPRINT_SECONDS, addStats, diagnose, groupScores, levelOf, loadProgress, nextTier, pickQuestion, pointsFor, questionsFor, saveProgress, startTier,
+  LEVELS, MAX_HEARTS, RETRY_GAP, SPRINT_SECONDS, UNLOCK_AT, addStats, catchUp, groupScores, levelOf, loadProgress, maxTier, nextQuestion, nextTier, pointsFor,
+  questionsFor, saveProgress, startTier, trackPosition, updateMistakes,
   type Answer, type Focus, type Progress,
 } from './game';
 import { SkillRadar } from './SkillRadar';
@@ -22,6 +23,12 @@ interface Round {
   streak: number;
   points: number;
   current?: Question;
+  /** The current question is one you missed before. */
+  retry: boolean;
+  /** Missed in this round — asked again once due. */
+  retries: { id: string; due: number }[];
+  /** Missed in earlier rounds (snapshot at the start). */
+  past: string[];
   /** Index chosen for the current question; undefined while answering. */
   chosen?: number;
   msLeft: number;
@@ -29,7 +36,12 @@ interface Round {
   before: { xp: number; best: number };
 }
 
-const TIER_LABEL: Record<Tier, string> = { 1: 'Easy', 2: 'Medium', 3: 'Hard' };
+const TIER: Record<Tier, { label: string; cls: string }> = {
+  1: { label: 'Easy', cls: 'bg-sp-mint/15 text-sp-mint' },
+  2: { label: 'Medium', cls: 'bg-sp-amber/15 text-sp-amber' },
+  3: { label: 'Hard', cls: 'bg-sp-pink/15 text-sp-pink' },
+  4: { label: 'Expert', cls: 'bg-sp-blue/20 text-sp-blue' },
+};
 
 function beatTarget(): number | undefined {
   try {
@@ -40,7 +52,10 @@ function beatTarget(): number | undefined {
   }
 }
 
-const focusFor = (player: Player, group: GroupId | null): Focus => (group ? { kind: 'topic', group } : { kind: 'mixed', stage: stageOf(player), weights: relevance(player) });
+function focusFor(player: Player, group: GroupId | null, xp: number): Focus {
+  const cap = maxTier(levelOf(xp).index);
+  return group ? { kind: 'topic', group, maxTier: cap } : { kind: 'mixed', stage: stageOf(player), weights: relevance(player), maxTier: cap };
+}
 
 export default function ChallengeApp() {
   const [progress, setProgressState] = useState<Progress>(() => loadProgress());
@@ -63,10 +78,17 @@ export default function ChallengeApp() {
 
   const start = (mode: Mode, group: GroupId | null = null) => {
     if (!progress.player) return;
-    const focus = focusFor(progress.player, group);
-    const tier = focus.kind === 'topic' ? 1 : startTier(levelOf(progress.xp).index);
-    const r: Round = { mode, focus, answers: [], asked: new Set(), areas: {}, tier, streak: 0, points: 0, msLeft: SPRINT_SECONDS * 1000, before: { xp: progress.xp, best: progress.best } };
-    r.current = pickQuestion(QUESTIONS, tier, r.asked, r.areas, focus);
+    const focus = focusFor(progress.player, group, progress.xp);
+    const lv = levelOf(progress.xp).index;
+    const tier = Math.min(group ? 1 : startTier(lv), focus.maxTier ?? 4) as Tier;
+    const past = progress.mistakes ?? [];
+    const r: Round = {
+      mode, focus, answers: [], asked: new Set(), areas: {}, tier, streak: 0, points: 0, retry: false, retries: [], past,
+      msLeft: SPRINT_SECONDS * 1000, before: { xp: progress.xp, best: progress.best },
+    };
+    const first = nextQuestion(QUESTIONS, { tier, asked: r.asked, roundAreas: r.areas, focus, answers: [], retries: [], past });
+    r.current = first.question;
+    r.retry = first.retry;
     setRound(r);
     setPhase('play');
   };
@@ -75,7 +97,7 @@ export default function ChallengeApp() {
     (r: Round, endedBy: Round['endedBy']) => {
       setRound({ ...r, endedBy });
       const right = r.answers.filter((a) => a.right).length;
-      const p = { ...progress, stats: addStats(progress.stats, r.answers) };
+      const p: Progress = { ...progress, stats: addStats(progress.stats, r.answers), mistakes: updateMistakes(progress.mistakes, r.answers) };
       if (r.mode === 'sprint') {
         p.xp = progress.xp + r.points;
         p.best = Math.max(progress.best, right);
@@ -88,26 +110,25 @@ export default function ChallengeApp() {
 
   return (
     <>
-      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-white focus:px-4 focus:py-2">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-white focus:px-4 focus:py-2 focus:text-sp-bg">
         Skip to content
       </a>
-      <header className="sticky top-0 z-30 border-b border-mist-200/80 bg-mist-50/90 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-sp-bg/85 backdrop-blur">
         <div className="mx-auto flex max-w-xl items-center justify-between gap-3 px-4 py-2.5">
           <span className="flex items-center gap-2">
-            <span aria-hidden className="grid h-7 w-7 place-items-center rounded-[9px] bg-navy-800">
-              <span className="h-2.5 w-2.5 rounded-full bg-magenta-500" />
+            <span aria-hidden className="grid h-7 w-7 place-items-center rounded-[9px] bg-sp-blue-fill">
+              <Icon name="Zap" className="h-4 w-4 text-white" />
             </span>
-            <span className="display text-[17px]">Design Your Life</span>
-            <span className="rounded-full bg-navy-50 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-navy-800">Sprint</span>
+            <span className="sp-title text-[18px]">Money Sprint</span>
           </span>
-          <nav aria-label="Other versions" className="flex gap-3 text-sm font-semibold text-ink-soft">
+          <nav aria-label="Other versions" className="flex gap-3 text-sm font-semibold text-sp-soft">
             <a href="../lite/" className="underline-offset-4 hover:underline">Lite</a>
             <a href="../" className="underline-offset-4 hover:underline">Full</a>
           </nav>
         </div>
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-xl px-4 pb-16 pt-4">
+      <main id="main" className="mx-auto w-full max-w-xl px-4 pb-16 pt-5">
         {phase === 'home' && <Home progress={progress} setProgress={setProgress} beat={beat} onStart={start} />}
         {phase === 'play' && round && <Play round={round} setRound={setRound} progress={progress} setProgress={setProgress} onFinish={finish} />}
         {phase === 'results' && round && <Results round={round} progress={progress} beat={beat} onAgain={start} onHome={() => setPhase('home')} />}
@@ -122,34 +143,67 @@ function Hearts({ n, size = 'md' }: { n: number; size?: 'sm' | 'md' }) {
   return (
     <span className="flex items-center gap-0.5" role="img" aria-label={`${n} of ${MAX_HEARTS} hearts left`}>
       {Array.from({ length: MAX_HEARTS }, (_, i) => (
-        <Icon key={i} name="Heart" className={cx(size === 'sm' ? 'h-4 w-4' : 'h-5 w-5', i < n ? 'fill-magenta-500 text-magenta-500' : 'text-mist-300')} />
+        <Icon key={i} name="Heart" className={cx(size === 'sm' ? 'h-4 w-4' : 'h-5 w-5', i < n ? 'fill-sp-pink text-sp-pink' : 'text-white/25')} />
       ))}
     </span>
   );
 }
 
-function LevelBar({ xp }: { xp: number }) {
+/** All five levels on one track; the fill sits between the level you're in and the next. */
+function LevelTrack({ xp }: { xp: number }) {
   const lv = levelOf(xp);
+  const pos = trackPosition(xp);
+  const last = LEVELS.length - 1;
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
         <span className="flex items-center gap-1.5 font-semibold">
-          <Icon name="Medal" className="h-4 w-4 text-magenta-600" />
+          <Icon name="Medal" className="h-4 w-4 text-sp-amber" />
           {lv.name}
         </span>
-        <span className="text-xs text-ink-mute">{lv.next ? `${xp} / ${lv.next.xp} pts to ${lv.next.name}` : `${xp} pts · top level`}</span>
+        <span className="text-xs text-sp-mute">
+          {lv.next ? (
+            <>
+              {lv.next.xp - xp} pts to <span className="font-semibold text-sp-soft">{lv.next.name}</span> · level {lv.index + 1} of {LEVELS.length}
+            </>
+          ) : (
+            `${xp} pts · top level`
+          )}
+        </span>
       </div>
-      <div className="mt-1.5 h-2 rounded-full bg-mist-100" role="progressbar" aria-label="Progress to next level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(lv.progress * 100)}>
-        <div className="h-2 rounded-full bg-gradient-to-r from-navy-800 to-magenta-500 transition-[width] duration-700" style={{ width: `${Math.max(4, lv.progress * 100)}%` }} />
+      <div className="px-2">
+        <div className="relative mt-3 h-2 rounded-full bg-white/10" role="progressbar" aria-label={`Level progress: ${lv.name}, ${xp} points`} aria-valuemin={0} aria-valuemax={LEVELS[last].xp} aria-valuenow={Math.min(xp, LEVELS[last].xp)}>
+          <div className="h-2 rounded-full bg-gradient-to-r from-sp-blue-fill to-sp-pink transition-[width] duration-700" style={{ width: `${pos * 100}%` }} />
+          {LEVELS.map((l, i) => (
+            <span
+              key={l.name}
+              title={`${l.name} · ${l.xp} pts`}
+              className={cx('absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2', i <= lv.index ? 'border-sp-card bg-sp-pink' : 'border-white/25 bg-sp-card')}
+              style={{ left: `${(i / last) * 100}%` }}
+            />
+          ))}
+        </div>
       </div>
-      <ol className="mt-2 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-ink-mute" aria-label="Levels">
-        {LEVELS.map((l, i) => (
-          <li key={l.name} className={cx(i === lv.index && 'text-navy-800')}>
-            {l.name}
-          </li>
-        ))}
-      </ol>
     </div>
+  );
+}
+
+/** Which difficulties are open, and what unlocks the next one. */
+function Unlocks({ xp }: { xp: number }) {
+  const lv = levelOf(xp).index;
+  return (
+    <ul className="mt-4 flex flex-wrap gap-1.5 text-[11px] font-bold" aria-label="Question difficulty">
+      {([1, 2, 3, 4] as Tier[]).map((t) => {
+        const open = lv >= UNLOCK_AT[t];
+        return (
+          <li key={t} className={cx('inline-flex items-center gap-1 rounded-full px-2 py-1', open ? TIER[t].cls : 'bg-white/5 text-sp-mute')}>
+            {!open && <Icon name="Lock" className="h-3 w-3" />}
+            {TIER[t].label}
+            {!open && <span className="font-semibold"> · at {LEVELS[UNLOCK_AT[t]].name}</span>}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -162,19 +216,23 @@ function untilTomorrow() {
 
 // ---------------------------------------------------------------------------------------------
 
-/** Step 1: who you are, so questions and the skill map fit your stage. Asked once, editable. */
+/** Who you are, so questions and comparisons fit your stage. Asked once, editable. */
 function PlayerSetup({ initial, onSave, onCancel }: { initial?: Player; onSave: (p: Player) => void; onCancel?: () => void }) {
   const [age, setAge] = useState(initial?.age ?? 22);
   const [situation, setSituation] = useState(initial?.situation);
   return (
-    <Card className="pop p-5">
-      <h2 className="display text-xl">First, a little about you</h2>
-      <p className="mt-1 text-sm text-ink-mute">We’ll match questions to your life stage, using MoneySense’s life-stage guidance.</p>
+    <section className="sp-card pop p-5" aria-labelledby="setup-h">
+      <h2 id="setup-h" className="sp-title text-xl">First, a little about you</h2>
+      <p className="mt-1 text-sm text-sp-mute">We’ll pick questions for your life stage, using MoneySense’s life-stage guidance.</p>
       <div className="mt-4">
-        <Slider label="Your age" value={age} min={17} max={35} onChange={setAge} />
+        <div className="flex items-baseline justify-between">
+          <label htmlFor="age" className="text-sm font-medium text-sp-soft">Your age</label>
+          <output htmlFor="age" className="sp-title text-lg">{age}</output>
+        </div>
+        <input id="age" type="range" min={17} max={35} value={age} onChange={(e) => setAge(Number(e.target.value))} style={{ ['--fill' as string]: `${((age - 17) / 18) * 100}%` }} />
       </div>
       <fieldset className="mt-4">
-        <legend className="text-sm font-medium text-ink-soft">Right now I’m…</legend>
+        <legend className="text-sm font-medium text-sp-soft">Right now I’m…</legend>
         <div className="mt-2 grid grid-cols-2 gap-2">
           {SITUATIONS.map((s) => (
             <button
@@ -182,7 +240,7 @@ function PlayerSetup({ initial, onSave, onCancel }: { initial?: Player; onSave: 
               type="button"
               aria-pressed={situation === s.value}
               onClick={() => setSituation(s.value)}
-              className={cx('flex min-h-[48px] items-center gap-2 rounded-2xl border px-3 text-left text-sm font-semibold', situation === s.value ? 'border-navy-800 bg-navy-50' : 'border-mist-300 bg-white hover:border-ink-soft')}
+              className={cx('sp-tile flex min-h-[50px] items-center gap-2 px-3 text-left text-sm font-semibold', situation === s.value && '!border-sp-blue bg-sp-blue/15')}
             >
               <Icon name={s.icon} className="h-4 w-4 shrink-0" />
               {s.label}
@@ -190,17 +248,17 @@ function PlayerSetup({ initial, onSave, onCancel }: { initial?: Player; onSave: 
           ))}
         </div>
       </fieldset>
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Button iconRight="ArrowRight" disabled={!situation} onClick={() => situation && onSave({ age, situation })}>
-          {initial ? 'Save' : 'Show my challenge'}
-        </Button>
+      <div className="mt-5 flex flex-wrap items-center gap-4">
+        <button type="button" className="sp-btn disabled:opacity-40" disabled={!situation} onClick={() => situation && onSave({ age, situation })}>
+          {initial ? 'Save' : 'Let’s go'} <Icon name="ArrowRight" className="h-4 w-4" />
+        </button>
         {onCancel && (
-          <Button variant="ghost" onClick={onCancel}>
+          <button type="button" className="sp-link text-sm" onClick={onCancel}>
             Cancel
-          </Button>
+          </button>
         )}
       </div>
-    </Card>
+    </section>
   );
 }
 
@@ -215,20 +273,18 @@ function Home({
   const [editing, setEditing] = useState(false);
   const out = progress.hearts <= 0;
   const player = progress.player;
+  const missed = progress.mistakes?.length ?? 0;
 
   return (
     <>
-      <section className="rise relative mb-5 overflow-hidden rounded-[28px] bg-gradient-to-br from-navy-800 via-[#2F1A6E] to-magenta-600 p-5 text-white">
-        <div aria-hidden className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-magenta-300/40 blur-3xl" />
-        <div className="relative">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-magenta-300">Test your skills · 60 seconds</p>
-          <h1 className="display mt-1 text-[28px] leading-[1.1] text-white">How sharp are your money skills?</h1>
-          <p className="mt-2 text-[14px] leading-relaxed text-navy-100">Answer as many as you can before time runs out. Right answers move you up the levels. Wrong ones cost a heart — you get 5 a day.</p>
-        </div>
-      </section>
+      <header className="rise mb-5">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-sp-blue">Test your skills · 60 seconds</p>
+        <h1 className="sp-title mt-1 text-[34px] leading-[1.05]">How sharp are your money skills?</h1>
+        <p className="mt-2 text-[15px] leading-relaxed text-sp-soft">Right answers move you up the levels and unlock harder questions. Wrong ones cost a heart — you get 5 a day.</p>
+      </header>
 
       {beat && (
-        <p className="pop mb-4 flex items-center gap-2 rounded-2xl bg-magenta-50 px-4 py-3 text-sm font-semibold text-magenta-700">
+        <p className="pop mb-4 flex items-center gap-2 rounded-2xl border border-sp-amber/40 bg-sp-amber/10 px-4 py-3 text-sm font-semibold text-sp-amber">
           <Icon name="Trophy" className="h-5 w-5" />A friend got {beat} right in 60 seconds. Can you beat it?
         </p>
       )}
@@ -244,174 +300,214 @@ function Home({
         />
       ) : (
         <>
-          <Card className="rise-2 p-5">
+          <section className="sp-card rise-2 p-5" aria-label="Your progress">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm">
                 <span className="font-semibold">
                   {player.age} · {SITUATIONS.find((s) => s.value === player.situation)?.label}
                 </span>
-                <span className="text-ink-mute"> · {STAGE_INFO[stageOf(player)].label}</span>
+                <span className="text-sp-mute"> · {STAGE_INFO[stageOf(player)].label} </span>
+                <button type="button" onClick={() => setEditing(true)} className="sp-link ml-1 text-sm">
+                  Edit
+                </button>
               </p>
-              <button type="button" onClick={() => setEditing(true)} className="text-sm font-semibold text-navy-700 underline-offset-4 hover:underline">
-                Edit
-              </button>
-            </div>
-            <div className="mt-4 flex items-center justify-between border-t border-mist-200 pt-4">
-              <span className="text-sm font-semibold text-ink-soft">Today</span>
               <Hearts n={progress.hearts} />
             </div>
-            <div className="mt-4">
-              <LevelBar xp={progress.xp} />
+            <div className="mt-5">
+              <LevelTrack xp={progress.xp} />
             </div>
+            <Unlocks xp={progress.xp} />
+          </section>
 
+          <div className="rise-3 mt-5">
             {out ? (
-              <div className="mt-5 rounded-2xl bg-mist-100 p-4 text-sm">
-                <p className="flex items-center gap-2 font-semibold">
-                  <Icon name="HeartCrack" className="h-4 w-4 text-magenta-600" /> Out of hearts for today
-                </p>
-                <p className="mt-1 text-ink-soft">5 new hearts in {untilTomorrow()}.</p>
-              </div>
+              <p className="sp-card flex items-center gap-3 p-4 text-sm">
+                <Icon name="HeartCrack" className="h-5 w-5 shrink-0 text-sp-pink" />
+                <span>
+                  <strong>Out of hearts for today.</strong> <span className="text-sp-soft">5 new hearts in {untilTomorrow()}.</span>
+                </span>
+              </p>
             ) : (
-              <button type="button" onClick={() => onStart('sprint', null)} className="mt-5 flex w-full items-center gap-3 rounded-2xl bg-magenta-600 p-4 text-left text-white hover:bg-magenta-700">
+              <button type="button" onClick={() => onStart('sprint', null)} className="sp-btn w-full justify-start gap-3 px-4 py-3 text-left">
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/15">
                   <Icon name="Zap" className="h-6 w-6" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[17px] font-bold">Start a 60-second sprint</span>
-                  <span className="block text-xs text-magenta-100">Mixed questions picked for age {player.age} · {STAGE_INFO[stageOf(player)].label.toLowerCase()}</span>
+                  <span className="sp-title block text-[19px]">Start a 60-second sprint</span>
+                  <span className="block text-xs font-medium text-white/80">Mixed questions for age {player.age} · {STAGE_INFO[stageOf(player)].label.toLowerCase()}</span>
                 </span>
                 <Icon name="ArrowRight" className="h-5 w-5 shrink-0" />
               </button>
             )}
-            <p className="mt-2 text-center text-xs text-ink-mute">
+            {missed > 0 && (
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-xs font-semibold text-sp-amber">
+                <Icon name="RotateCcw" className="h-3.5 w-3.5" />
+                {missed} question{missed === 1 ? '' : 's'} you missed will come back for a second try
+              </p>
+            )}
+            <p className="mt-3 text-center text-xs text-sp-mute">
               {out ? 'Meanwhile, you can ' : 'Rather not race? '}
-              <button type="button" onClick={() => onStart('practice', null)} className="font-semibold text-navy-700 underline underline-offset-2">
+              <button type="button" onClick={() => onStart('practice', null)} className="sp-link">
                 practise without a timer
               </button>
             </p>
-          </Card>
+          </div>
 
           <TopicDive player={player} out={out} onStart={onStart} />
-          <Leaderboard player={player} best={progress.best} />
-          <SkillMapSection player={player} stats={progress.stats} />
+          <Compare player={player} progress={progress} onPractise={(g) => onStart('practice', g)} />
         </>
       )}
 
-      <p className="mt-6 text-center text-xs leading-relaxed text-ink-mute">
-        Progress is kept only in this browser — nothing is sent or saved anywhere else. Questions use public Singapore sources, MoneySense first (with CPF, IRAS, HDB, MOH, MAS and SPF); some prices are illustrative and say so. Leaderboard and peer averages are demo data.
+      <p className="mt-8 text-center text-xs leading-relaxed text-sp-mute">
+        Progress stays in this browser — nothing is sent anywhere. Questions use public Singapore sources, MoneySense first (with CPF, IRAS, HDB, MOH, MAS and SPF); illustrative figures say so. Leaderboard and peer averages are demo data.
       </p>
     </>
   );
 }
 
-/** Secondary option: a sprint on one key area. Collapsed by default to keep one clear main action. */
+/** Secondary option: a sprint on one key area. Collapsed to keep one clear main action. */
 function TopicDive({ player, out, onStart }: { player: Player; out: boolean; onStart: (m: Mode, group?: GroupId | null) => void }) {
   return (
-    <details className="group mt-4 rounded-3xl bg-white shadow-card">
+    <details className="sp-card group mt-6">
       <summary className="flex min-h-[56px] cursor-pointer items-center gap-3 px-5 py-3">
-        <Icon name="Target" className="h-5 w-5 text-navy-700" />
+        <Icon name="Target" className="h-5 w-5 text-sp-blue" />
         <span className="flex-1">
           <span className="block text-sm font-semibold">Or dive into a key area</span>
-          <span className="block text-xs text-ink-mute">Every question on one topic</span>
+          <span className="block text-xs text-sp-mute">Every question on one topic</span>
         </span>
-        <Icon name="ChevronDown" className="h-4 w-4 text-ink-mute transition-transform group-open:rotate-180" />
+        <Icon name="ChevronDown" className="h-4 w-4 text-sp-mute transition-transform group-open:rotate-180" />
       </summary>
       <ul className="grid grid-cols-2 gap-2 px-4 pb-4">
-        {GROUPS.map((g) => {
-          const core = groupRelevance(player, g) === 2;
-          return (
-            <li key={g.id}>
-              <button type="button" onClick={() => onStart(out ? 'practice' : 'sprint', g.id)} className="flex h-full w-full flex-col items-start rounded-2xl border border-mist-200 p-3 text-left hover:border-ink-soft">
-                <span className="flex w-full items-center justify-between">
-                  <Icon name={g.icon} className="h-5 w-5 text-navy-700" />
-                  {core && <span className="rounded-full bg-magenta-50 px-1.5 py-0.5 text-[10px] font-bold text-magenta-700">Core for you</span>}
-                </span>
-                <span className="mt-1.5 text-sm font-semibold leading-tight">{g.title}</span>
-                <span className="text-xs text-ink-mute">{g.blurb}</span>
-              </button>
-            </li>
-          );
-        })}
+        {GROUPS.map((g) => (
+          <li key={g.id}>
+            <button type="button" onClick={() => onStart(out ? 'practice' : 'sprint', g.id)} className="sp-tile flex h-full w-full flex-col items-start p-3 text-left">
+              <span className="flex w-full items-center justify-between">
+                <Icon name={g.icon} className="h-5 w-5 text-sp-blue" />
+                {groupRelevance(player, g) === 2 && <span className="rounded-full bg-sp-pink/15 px-1.5 py-0.5 text-[10px] font-bold text-sp-pink">Core for you</span>}
+              </span>
+              <span className="mt-1.5 text-sm font-semibold leading-tight">{g.title}</span>
+              <span className="text-xs text-sp-mute">{g.blurb}</span>
+            </button>
+          </li>
+        ))}
       </ul>
     </details>
   );
 }
 
-/** Demo leaderboard for the player's age band — clearly labelled; replace with real scores later. */
-function Leaderboard({ player, best }: { player: Player; best: number }) {
+/**
+ * The hook: how you compare with players your age (demo data), then the two areas to catch up on.
+ * The full leaderboard is one tap away.
+ */
+function Compare({ player, progress, onPractise }: { player: Player; progress: Progress; onPractise: (g: GroupId) => void }) {
+  const you = groupScores(progress.stats);
+  const peers = peerAverage(player);
   const band = ageBand(player.age).label;
-  const rows = leaderboard(player, best);
-  const me = rows.find((r) => r.you);
-  const shown = rows.filter((r) => r.rank <= 5 || r.you);
+  const rel = Object.fromEntries(GROUPS.map((g) => [g.id, groupRelevance(player, g)])) as Record<GroupId, Relevance>;
+  const board = leaderboard(player, progress.best);
+  const me = board.find((r) => r.you);
+  const played = GROUPS.some((g) => you[g.id].seen > 0);
+  const focus = catchUp(you, peers, rel);
+  const untried = GROUPS.filter((g) => !you[g.id].seen && rel[g.id] === 2);
+
   return (
-    <section className="mt-8" aria-labelledby="board-h">
-      <div className="flex items-end justify-between gap-2">
-        <h2 id="board-h" className="display text-xl">This week · ages {band}</h2>
-        <span className="rounded bg-mist-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-mute">Demo</span>
+    <section className="mt-8" aria-labelledby="cmp-h">
+      <h2 id="cmp-h" className="sp-title text-2xl">You vs players aged {band}</h2>
+      <p className="mt-1 text-sm text-sp-soft">
+        {me ? (
+          <>
+            You’d rank <strong className="text-white">#{me.rank} of {board.length}</strong> this week
+          </>
+        ) : (
+          'Play a sprint to see where you rank'
+        )}
+        <span className="ml-1.5 rounded bg-white/10 px-1 py-px text-[10px] font-bold uppercase tracking-wide text-sp-mute">demo</span>
+      </p>
+      <div className="sp-card mt-3 p-4">
+        <SkillRadar you={you} peers={peers} rel={rel} bandLabel={band} />
       </div>
-      <p className="mt-1 text-xs text-ink-mute">Sample players to show how a leaderboard would work — not real people. Ranked by most right in one sprint.</p>
-      <ol className="mt-3 overflow-hidden rounded-3xl bg-white shadow-card">
-        {shown.map((r, i) => (
-          <li key={r.name} className={cx('flex items-center gap-3 px-4 py-2.5 text-sm', i > 0 && 'border-t border-mist-100', r.you && 'bg-magenta-50 font-semibold', r.you && r.rank > 6 && 'border-t-2 border-dashed border-mist-200')}>
-            <span className={cx('grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold', r.rank === 1 ? 'bg-[#FBEFD9] text-[#8A5A12]' : 'bg-mist-100 text-ink-soft')}>{r.rank}</span>
-            <span className="flex-1 truncate">{r.you ? 'You' : r.name}</span>
-            <span className="tabular-nums text-ink-soft">{r.best} right</span>
-          </li>
-        ))}
-      </ol>
-      {!me && <p className="mt-2 text-xs text-ink-mute">Play a sprint to get on the board.</p>}
+
+      {played && (
+        <div className="mt-5">
+          <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-sp-mute">{focus.length ? 'Catch up on' : 'You’re ahead everywhere you’ve played'}</h3>
+          <ul className="mt-2 space-y-2.5">
+            {focus.map((id) => (
+              <CatchUpCard key={id} id={id} you={you[id]} peer={peers[id]} stats={progress.stats} onPractise={() => onPractise(id)} />
+            ))}
+            {!focus.length && untried[0] && (
+              <li className="sp-card p-4 text-sm text-sp-soft">
+                Next, try <strong className="text-white">{untried[0].title}</strong> — it’s core at your stage.{' '}
+                <button type="button" className="sp-link" onClick={() => onPractise(untried[0].id)}>
+                  Practise it
+                </button>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+
+      <details className="group mt-4">
+        <summary className="sp-link inline-flex cursor-pointer items-center gap-1 text-sm">
+          This week’s leaderboard <Icon name="ChevronDown" className="h-4 w-4 transition-transform group-open:rotate-180" />
+        </summary>
+        <Leaderboard rows={board} />
+      </details>
     </section>
   );
 }
 
-/** How you compare: the spider diagram plus the same information as a list. */
-function SkillMapSection({ player, stats }: { player: Player; stats: Progress['stats'] }) {
-  const you = groupScores(stats);
-  const peers = peerAverage(player);
-  const band = ageBand(player.age).label;
-  const rel = Object.fromEntries(GROUPS.map((g) => [g.id, groupRelevance(player, g)])) as Record<GroupId, Relevance>;
+function CatchUpCard({ id, you, peer, stats, onPractise }: { id: GroupId; you: { right: number; seen: number; share?: number }; peer: number; stats: Progress['stats']; onPractise: () => void }) {
+  const g = groupById(id);
+  // Advice comes from the weaker of the area's two skills.
+  const share = (a: Area) => (stats[a]?.seen ? stats[a]!.right / stats[a]!.seen : 1);
+  const weakest = [...g.areas].sort((a, b) => share(a) - share(b))[0];
+  const info = AREAS[weakest];
+  const reading = info.readings[0];
   return (
-    <section className="mt-8" aria-labelledby="map-h">
-      <h2 id="map-h" className="display text-xl">How you compare</h2>
-      <p className="mt-1 text-sm leading-relaxed text-ink-soft">{STAGE_INFO[stageOf(player)].focus}</p>
-      <Card className="mt-3 p-4">
-        <SkillRadar you={you} peers={peers} rel={rel} bandLabel={band} />
-      </Card>
-      <ul className="mt-3 space-y-2">
-        {GROUPS.map((g) => {
-          const y = you[g.id];
-          const weak = y.share !== undefined && y.share < peers[g.id];
-          return (
-            <li key={g.id} className="rounded-2xl bg-white p-3 shadow-card">
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex min-w-0 items-center gap-2 font-semibold">
-                  <Icon name={g.icon} className="h-4 w-4 shrink-0 text-navy-700" />
-                  <span className="truncate">{g.title}</span>
-                  {rel[g.id] === 2 && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-magenta-500" aria-label="core for your stage" />}
-                </span>
-                <span className="shrink-0 text-xs font-semibold text-ink-mute">
-                  {y.seen ? `You ${Math.round((y.share ?? 0) * 100)}%` : 'Not tried'} · Peers {Math.round(peers[g.id] * 100)}%
-                </span>
-              </div>
-              <div className="relative mt-2 h-1.5 rounded-full bg-mist-100" aria-hidden>
-                {y.share !== undefined && <div className={cx('h-1.5 rounded-full', y.share >= peers[g.id] ? 'bg-sage-600' : 'bg-magenta-500')} style={{ width: `${Math.max(6, y.share * 100)}%` }} />}
-                <span className="absolute -top-1 h-3.5 w-0.5 rounded bg-[#1A56E5]" style={{ left: `${peers[g.id] * 100}%` }} />
-              </div>
-              {weak && (
-                <a href={AREAS[g.areas[0]].readings[0].url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-navy-700 underline-offset-4 hover:underline">
-                  Read: {AREAS[g.areas[0]].readings[0].label} · {AREAS[g.areas[0]].readings[0].org}
-                  <Icon name="ExternalLink" className="h-3 w-3" />
-                  <span className="sr-only">(opens in a new tab)</span>
-                </a>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      <p className="mt-2 text-xs text-ink-mute">
-        <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-magenta-500 align-middle" aria-hidden />Core for your stage · blue mark = players aged {band} (demo)
-      </p>
-    </section>
+    <li className="sp-card p-4">
+      <div className="flex items-center gap-2">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-sp-pink/15 text-sp-pink">
+          <Icon name={g.icon} className="h-4 w-4" />
+        </span>
+        <h4 className="flex-1 font-semibold">{g.title}</h4>
+        <span className="text-xs font-semibold text-sp-mute">
+          You {Math.round((you.share ?? 0) * 100)}% · Peers {Math.round(peer * 100)}%
+        </span>
+      </div>
+      <div className="relative mt-3 h-2 rounded-full bg-white/10" aria-hidden>
+        <div className="h-2 rounded-full bg-sp-pink" style={{ width: `${Math.max(4, (you.share ?? 0) * 100)}%` }} />
+        <span className="absolute -top-1 h-4 w-0.5 rounded bg-sp-blue" style={{ left: `${peer * 100}%` }} />
+      </div>
+      <p className="mt-3 text-sm leading-relaxed text-sp-soft">{info.tip}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+        <button type="button" className="sp-link" onClick={onPractise}>
+          Practise {g.title.toLowerCase()} →
+        </button>
+        <a href={reading.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sp-soft underline-offset-4 hover:underline">
+          {reading.label} · {reading.org}
+          <Icon name="ExternalLink" className="h-3.5 w-3.5" />
+          <span className="sr-only">(opens in a new tab)</span>
+        </a>
+      </div>
+    </li>
+  );
+}
+
+function Leaderboard({ rows }: { rows: ReturnType<typeof leaderboard> }) {
+  const shown = rows.filter((r) => r.rank <= 5 || r.you);
+  return (
+    <div className="mt-3">
+      <p className="text-xs text-sp-mute">Sample players to show how a leaderboard would work — not real people. Ranked by most right in one sprint.</p>
+      <ol className="sp-card mt-2 overflow-hidden">
+        {shown.map((r, i) => (
+          <li key={r.name} className={cx('flex items-center gap-3 px-4 py-2.5 text-sm', i > 0 && 'border-t border-white/10', r.you && 'bg-sp-pink/15 font-semibold')}>
+            <span className={cx('grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold', r.rank === 1 ? 'bg-sp-amber text-sp-bg' : 'bg-white/10 text-sp-soft')}>{r.rank}</span>
+            <span className="flex-1 truncate">{r.you ? 'You' : r.name}</span>
+            <span className="tabular-nums text-sp-soft">{r.best} right</span>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 
@@ -462,17 +558,21 @@ function Play({
     const streak = ok ? round.streak + 1 : 0;
     const points = round.points + (ok ? pointsFor(q.tier, streak) : 0);
     const areas = { ...round.areas, [q.area]: (round.areas[q.area] ?? 0) + 1 };
-    setRound({ ...round, chosen: i, streak, points, areas, answers: [...round.answers, { question: q, chosen: i, right: ok }], asked: new Set(round.asked).add(q.id) });
+    const answers = [...round.answers, { question: q, chosen: i, right: ok }];
+    // Duolingo-style: a miss comes back a few questions later.
+    const retries = ok ? round.retries : [...round.retries.filter((r) => r.id !== q.id), { id: q.id, due: answers.length + RETRY_GAP }];
+    setRound({ ...round, chosen: i, streak, points, areas, answers, retries, asked: new Set(round.asked).add(q.id) });
     if (!ok && timed) setProgress({ ...progress, hearts: Math.max(0, progress.hearts - 1) });
   };
 
   const outOfHearts = timed && progress.hearts <= 0;
   const next = () => {
     if (outOfHearts) return onFinish(round, 'hearts');
-    const tier = nextTier(round.tier, round.answers[round.answers.length - 1].right, round.streak);
-    const current = pickQuestion(QUESTIONS, tier, round.asked, round.areas, round.focus);
-    if (!current) return onFinish(round, 'questions');
-    setRound({ ...round, tier, current, chosen: undefined });
+    const tier = nextTier(round.tier, round.answers[round.answers.length - 1].right, round.streak, round.focus.maxTier);
+    const n = nextQuestion(QUESTIONS, { tier, asked: round.asked, roundAreas: round.areas, focus: round.focus, answers: round.answers, retries: round.retries, past: round.past });
+    if (!n.question) return onFinish(round, 'questions');
+    const retries = round.retries.filter((r) => r.id !== n.question!.id);
+    setRound({ ...round, tier, current: n.question, retry: n.retry, retries, chosen: undefined });
   };
 
   // Number keys 1–4 pick an answer; Enter moves on.
@@ -494,46 +594,51 @@ function Play({
 
   return (
     <>
-      <div className="sticky top-[53px] z-20 -mx-4 mb-4 border-b border-mist-200/80 bg-mist-50/95 px-4 py-2.5 backdrop-blur">
+      <div className="sticky top-[53px] z-20 -mx-4 mb-5 border-b border-white/10 bg-sp-bg/90 px-4 py-2.5 backdrop-blur">
         <div className="flex items-center justify-between gap-3 text-sm font-semibold">
           {timed ? (
-            <span className={cx('flex items-center gap-1.5 tabular-nums', secs <= 10 && 'text-magenta-700')}>
+            <span className={cx('sp-title flex items-center gap-1.5 text-base tabular-nums', secs <= 10 && 'text-sp-pink')}>
               <Icon name="Timer" className="h-4 w-4" />
-              {secs}s{!answering && <span className="text-xs font-normal text-ink-mute"> · paused</span>}
+              {secs}s{!answering && <span className="font-sans text-xs font-normal text-sp-mute"> · paused</span>}
             </span>
           ) : (
-            <span className="text-ink-soft">Practice</span>
+            <span className="text-sp-soft">Practice</span>
           )}
           <span className="flex items-center gap-1.5">
-            <Icon name="CircleCheck" className="h-4 w-4 text-sage-700" />
+            <Icon name="CircleCheck" className="h-4 w-4 text-sp-mint" />
             {right} right
           </span>
-          {timed ? <Hearts n={progress.hearts} size="sm" /> : <span className="text-ink-mute">{round.points} pts</span>}
+          {timed ? <Hearts n={progress.hearts} size="sm" /> : <span className="text-sp-mute">{round.points} pts</span>}
         </div>
         {timed && (
-          <div className="mt-2 h-1.5 rounded-full bg-mist-200" aria-hidden>
-            <div className={cx('h-1.5 rounded-full transition-[width] duration-200 ease-linear', secs <= 10 ? 'bg-magenta-500' : 'bg-navy-800')} style={{ width: `${(round.msLeft / (SPRINT_SECONDS * 1000)) * 100}%` }} />
+          <div className="mt-2 h-2 rounded-full bg-white/10" aria-hidden>
+            <div className={cx('h-2 rounded-full transition-[width] duration-200 ease-linear', secs <= 10 ? 'bg-sp-pink' : 'bg-sp-blue')} style={{ width: `${(round.msLeft / (SPRINT_SECONDS * 1000)) * 100}%` }} />
           </div>
         )}
         {round.focus.kind === 'topic' && (
-          <p className="mt-1.5 text-xs text-ink-mute">
-            Topic: <strong className="text-ink-soft">{groupById(round.focus.group).title}</strong> · question {round.answers.length + (answering ? 1 : 0)} of {total}
+          <p className="mt-1.5 text-xs text-sp-mute">
+            Topic: <strong className="text-sp-soft">{groupById(round.focus.group).title}</strong> · {Math.min(round.asked.size + (answering ? 1 : 0), total)} of {total}
           </p>
         )}
         <p className="sr-only" aria-live="assertive">{announce}</p>
       </div>
 
-      <section key={q.id} className="pop" aria-labelledby="q-h">
-        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-          <span className="inline-flex items-center gap-1 rounded-full bg-navy-50 px-2.5 py-1 text-navy-800">
+      <section key={`${q.id}-${round.answers.length}`} className="pop" aria-labelledby="q-h">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-sp-soft">
             <Icon name={AREAS[q.area].icon} className="h-3.5 w-3.5" />
             {AREAS[q.area].axis}
           </span>
-          <span className={cx('rounded-full px-2.5 py-1', q.tier === 3 ? 'bg-magenta-100 text-magenta-700' : q.tier === 2 ? 'bg-[#FBEFD9] text-[#8A5A12]' : 'bg-sage-100 text-sage-700')}>
-            {TIER_LABEL[q.tier]} · {pointsFor(q.tier, 0)} pts
+          <span className={cx('rounded-full px-2.5 py-1', TIER[q.tier].cls)}>
+            {TIER[q.tier].label} · {pointsFor(q.tier, 0)} pts
           </span>
+          {round.retry && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-sp-amber/15 px-2.5 py-1 text-sp-amber">
+              <Icon name="RotateCcw" className="h-3.5 w-3.5" /> Second try
+            </span>
+          )}
           {round.streak >= 2 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF1E6] px-2.5 py-1 text-[#B4530F]">
+            <span className="inline-flex items-center gap-1 rounded-full bg-sp-amber/15 px-2.5 py-1 text-sp-amber">
               <Icon name="Flame" className="h-3.5 w-3.5" />
               {round.streak} in a row
             </span>
@@ -542,7 +647,7 @@ function Play({
         <h1 id="q-h" className="mt-3 text-[20px] font-bold leading-snug">
           {q.question}
         </h1>
-        <div className="mt-4 grid gap-2" role="group" aria-label="Answers">
+        <div className="mt-4 grid gap-2.5" role="group" aria-label="Answers">
           {q.options.map((o, i) => {
             const isAnswer = i === q.answer;
             const picked = round.chosen === i;
@@ -554,19 +659,18 @@ function Play({
                 onClick={() => choose(i)}
                 aria-pressed={picked}
                 className={cx(
-                  'flex min-h-[52px] items-center gap-3 rounded-2xl border px-4 py-3 text-left text-[15px] font-semibold transition-colors',
-                  answering && 'border-mist-300 bg-white hover:border-ink-soft',
-                  !answering && isAnswer && 'border-sage-600 bg-sage-100 text-sage-700',
-                  !answering && picked && !isAnswer && 'border-magenta-500 bg-magenta-50 text-magenta-700',
-                  !answering && !picked && !isAnswer && 'border-mist-200 bg-white/60 text-ink-mute',
+                  'sp-tile flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-[15px] font-semibold',
+                  !answering && isAnswer && '!border-sp-mint bg-sp-mint/15',
+                  !answering && picked && !isAnswer && '!border-sp-pink bg-sp-pink/15',
+                  !answering && !picked && !isAnswer && 'opacity-50',
                 )}
               >
-                <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-mist-100 text-xs font-bold text-ink-soft">
+                <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/10 text-xs font-bold text-sp-soft">
                   {i + 1}
                 </span>
                 <span className="flex-1">{o}</span>
-                {!answering && isAnswer && <Icon name="CircleCheck" className="h-5 w-5" label="Correct answer" />}
-                {!answering && picked && !isAnswer && <Icon name="X" className="h-5 w-5" label="Your answer" />}
+                {!answering && isAnswer && <Icon name="CircleCheck" className="h-5 w-5 text-sp-mint" label="Correct answer" />}
+                {!answering && picked && !isAnswer && <Icon name="X" className="h-5 w-5 text-sp-pink" label="Your answer" />}
               </button>
             );
           })}
@@ -574,20 +678,21 @@ function Play({
       </section>
 
       {!answering && last && (
-        <section className="pop mt-4 rounded-3xl bg-blush-100 p-5" aria-live="polite">
-          <p className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold', last.right ? 'bg-sage-100 text-sage-700' : 'bg-white text-magenta-700')}>
-            <Icon name={last.right ? 'CircleCheck' : timed ? 'HeartCrack' : 'Lightbulb'} className="h-3.5 w-3.5" />
-            {last.right ? `Right! +${pointsFor(q.tier, round.streak)} pts` : timed ? 'Not quite — you lost a heart' : 'Not quite'}
+        <section className={cx('sp-card pop mt-4 border-2 p-5', last.right ? '!border-sp-mint/50' : '!border-sp-pink/50')} aria-live="polite">
+          <p className={cx('inline-flex items-center gap-1.5 text-sm font-bold', last.right ? 'text-sp-mint' : 'text-sp-pink')}>
+            <Icon name={last.right ? 'CircleCheck' : timed ? 'HeartCrack' : 'Lightbulb'} className="h-4 w-4" />
+            {last.right ? `${round.retry ? 'Fixed it!' : 'Right!'} +${pointsFor(q.tier, round.streak)} pts` : timed ? 'Not quite — you lost a heart' : 'Not quite'}
           </p>
-          <p className="mt-2 text-[15px] leading-relaxed text-ink-soft">{q.explain}</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button iconRight="ArrowRight" onClick={next} autoFocus>
-              {outOfHearts ? 'Out of hearts — see results' : 'Next question'}
-            </Button>
+          <p className="mt-2 text-[15px] leading-relaxed text-sp-soft">{q.explain}</p>
+          {!last.right && <p className="mt-2 text-xs font-semibold text-sp-amber">This one will come back for a second try.</p>}
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <button type="button" className="sp-btn-blue" onClick={next} autoFocus>
+              {outOfHearts ? 'See results' : 'Continue'} <Icon name="ArrowRight" className="h-4 w-4" />
+            </button>
             {!timed && (
-              <Button variant="ghost" onClick={() => onFinish(round, 'stopped')}>
+              <button type="button" className="sp-link text-sm" onClick={() => onFinish(round, 'stopped')}>
                 Finish
-              </Button>
+              </button>
             )}
           </div>
         </section>
@@ -601,35 +706,126 @@ function Play({
 function Results({ round, progress, beat, onAgain, onHome }: { round: Round; progress: Progress; beat?: number; onAgain: (m: Mode, group?: GroupId | null) => void; onHome: () => void }) {
   const sprint = round.mode === 'sprint';
   const right = round.answers.filter((a) => a.right).length;
+  const missed = round.answers.filter((a) => !a.right).length;
   const before = levelOf(round.before.xp);
   const after = levelOf(progress.xp);
   const levelledUp = sprint && after.index > before.index;
+  const unlocked = ([3, 4] as Tier[]).filter((t) => before.index < UNLOCK_AT[t] && after.index >= UNLOCK_AT[t]);
   const newBest = sprint && right > round.before.best && right > 0;
-  const thisRound = diagnose(addStats({}, round.answers));
-  const allTime = diagnose(progress.stats);
-  const rel = progress.player ? relevance(progress.player) : undefined;
-  // Recommendations: this round's weak spots first, then all-time ones; core skills for your stage break ties.
-  const weak = [...thisRound.weak, ...allTime.weak.filter((w) => !thisRound.weak.some((t) => t.area === w.area))]
-    .slice(0, 3)
-    .sort((a, b) => a.share - b.share || (rel ? rel[b.area] - rel[a.area] : 0));
-  const strong = (thisRound.strong.length ? thisRound.strong : allTime.strong).slice(0, 3);
+  const fixed = round.answers.filter((a) => a.right && round.past.includes(a.question.id)).length;
   const topicGroup = round.focus.kind === 'topic' ? round.focus.group : null;
-  const [shared, setShared] = useState('');
+  const secs = Math.max(1, Math.round(SPRINT_SECONDS - round.msLeft / 1000));
+  const stillMissed = (progress.mistakes ?? []).length;
 
   const headline =
-    round.endedBy === 'hearts' ? 'Out of hearts!' : round.endedBy === 'time' ? 'Time’s up!' : round.endedBy === 'questions' ? (topicGroup ? `You answered every ${groupById(topicGroup).title.toLowerCase()} question!` : 'You answered every question!') : 'Practice done';
+    round.endedBy === 'hearts' ? 'Out of hearts' : round.endedBy === 'time' ? 'Time’s up' : round.endedBy === 'questions' ? (topicGroup ? `All ${groupById(topicGroup).title.toLowerCase()} questions done` : 'All questions done') : 'Practice done';
 
+  return (
+    <>
+      <section className="pop text-center">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-sp-blue">{headline}</p>
+        <h1 className="mt-1">
+          <span className="sp-title block text-[72px] leading-none">{right}</span>
+          <span className="mt-1 block text-base font-semibold text-sp-soft">
+            right {sprint ? `in ${secs} second${secs === 1 ? '' : 's'}` : `of ${round.answers.length}`}
+            {topicGroup && ` · ${groupById(topicGroup).title}`}
+          </span>
+        </h1>
+        <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs font-bold">
+          {sprint && <span className="rounded-full bg-white/10 px-3 py-1">+{round.points} pts</span>}
+          {levelledUp && <span className="rounded-full bg-sp-amber px-3 py-1 text-sp-bg">Level up! You’re a {after.name}</span>}
+          {unlocked.map((t) => (
+            <span key={t} className={cx('rounded-full px-3 py-1', TIER[t].cls)}>
+              {TIER[t].label} questions unlocked
+            </span>
+          ))}
+          {newBest && <span className="rounded-full bg-sp-pink/15 px-3 py-1 text-sp-pink">New personal best</span>}
+          {fixed > 0 && <span className="rounded-full bg-sp-mint/15 px-3 py-1 text-sp-mint">Fixed {fixed} past mistake{fixed === 1 ? '' : 's'}</span>}
+          {sprint && beat && <span className="rounded-full bg-white/10 px-3 py-1">{right > beat ? `You beat your friend’s ${beat}!` : right === beat ? `Tied with your friend’s ${beat}` : `Your friend got ${beat}`}</span>}
+        </div>
+      </section>
+
+      {sprint && (
+        <section className="sp-card mt-5 p-5" aria-label="Your progress">
+          <div className="mb-4 flex items-center justify-between text-sm">
+            <span className="font-semibold text-sp-soft">Hearts left today</span>
+            <Hearts n={progress.hearts} />
+          </div>
+          <LevelTrack xp={progress.xp} />
+        </section>
+      )}
+
+      <div className="mt-5 grid gap-3">
+        {progress.hearts > 0 ? (
+          <button type="button" className="sp-btn w-full" onClick={() => onAgain('sprint', topicGroup)}>
+            <Icon name="Zap" className="h-5 w-5" /> {topicGroup ? 'Another round on this topic' : 'Next sprint'}
+          </button>
+        ) : (
+          <button type="button" className="sp-btn-blue w-full" onClick={() => onAgain('practice', topicGroup)}>
+            <Icon name="BookOpen" className="h-5 w-5" /> Keep practising — no timer
+          </button>
+        )}
+        {stillMissed > 0 && (
+          <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-sp-amber">
+            <Icon name="RotateCcw" className="h-3.5 w-3.5" /> {stillMissed} missed question{stillMissed === 1 ? '' : 's'} will come back for a second try
+          </p>
+        )}
+      </div>
+
+      {progress.player && <Compare player={progress.player} progress={progress} onPractise={(g) => onAgain('practice', g)} />}
+
+      {round.answers.length > 0 && (
+        <details className="sp-card group mt-6">
+          <summary className="flex min-h-[52px] cursor-pointer items-center gap-2 px-5 py-3 text-sm font-semibold">
+            <span className="flex-1">
+              See your answers <span className="font-normal text-sp-mute">· {right} right, {missed} to review</span>
+            </span>
+            <Icon name="ChevronDown" className="h-4 w-4 text-sp-mute transition-transform group-open:rotate-180" />
+          </summary>
+          <ol className="space-y-2 px-4 pb-4">
+            {round.answers
+              .map((a, i) => ({ a, i }))
+              .sort((x, y) => Number(x.a.right) - Number(y.a.right))
+              .map(({ a, i }) => (
+                <li key={`${a.question.id}-${i}`} className="rounded-2xl bg-white/5 p-3.5">
+                  <p className="flex items-start gap-2 text-sm font-semibold">
+                    <Icon name={a.right ? 'CircleCheck' : 'X'} className={cx('mt-0.5 h-4 w-4 shrink-0', a.right ? 'text-sp-mint' : 'text-sp-pink')} label={a.right ? 'Right' : 'Wrong'} />
+                    {a.question.question}
+                  </p>
+                  {!a.right && (
+                    <p className="mt-1.5 pl-6 text-sm text-sp-soft">
+                      Answer: <strong className="text-white">{a.question.options[a.question.answer]}</strong>. {a.question.explain}
+                    </p>
+                  )}
+                </li>
+              ))}
+          </ol>
+        </details>
+      )}
+
+      {sprint && right > 0 && <ChallengeFriend right={right} />}
+
+      <p className="mt-6 text-center">
+        <button type="button" className="sp-link text-sm" onClick={onHome}>
+          Back to start
+        </button>
+      </p>
+    </>
+  );
+}
+
+function ChallengeFriend({ right }: { right: number }) {
+  const [shared, setShared] = useState('');
   const link = `${window.location.origin}${window.location.pathname}?beat=${right}`;
   const message = `I got ${right} right in a 60-second Design Your Life money sprint. Can you beat it?`;
 
   const copy = async () => {
     setShared((await copyText(`${message} ${link}`)) ? 'Link copied — paste it in a chat to challenge a friend.' : 'Couldn’t copy automatically — select the link below and copy it.');
   };
-
   const share = async () => {
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Design Your Life — Sprint', text: message, url: link });
+        await navigator.share({ title: 'Design Your Life — Money Sprint', text: message, url: link });
         setShared('Shared — may the best saver win!');
         return;
       } catch (e) {
@@ -640,167 +836,30 @@ function Results({ round, progress, beat, onAgain, onHome }: { round: Round; pro
   };
 
   return (
-    <>
-      <section className="pop relative overflow-hidden rounded-[28px] bg-gradient-to-br from-navy-800 via-[#2F1A6E] to-magenta-600 p-6 text-center text-white">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-magenta-300">{headline}</p>
-        <h1 className="display mt-2 text-[34px] leading-tight text-white">
-          {right} right{sprint ? ` in ${secondsLabel(SPRINT_SECONDS - round.msLeft / 1000)}` : ` of ${round.answers.length}`}
-        </h1>
-        {topicGroup && <p className="mt-1 text-sm text-navy-100">Topic: {groupById(topicGroup).title}</p>}
-        {sprint && <p className="mt-1 text-navy-100">+{round.points} points</p>}
-        <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs font-bold">
-          {levelledUp && <span className="rounded-full bg-white px-3 py-1 text-magenta-700">Level up! You’re now a {after.name}</span>}
-          {newBest && <span className="rounded-full bg-white/15 px-3 py-1">New personal best</span>}
-          {sprint && beat && <span className="rounded-full bg-white/15 px-3 py-1">{right > beat ? `You beat your friend’s ${beat}!` : right === beat ? `You tied your friend’s ${beat}` : `Your friend got ${beat} — so close`}</span>}
+    <details className="sp-card group mt-3">
+      <summary className="flex min-h-[52px] cursor-pointer items-center gap-2 px-5 py-3 text-sm font-semibold">
+        <Icon name="Trophy" className="h-4 w-4 text-sp-amber" />
+        <span className="flex-1">Challenge a friend to beat {right}</span>
+        <Icon name="ChevronDown" className="h-4 w-4 text-sp-mute transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="px-5 pb-5">
+        <div className="flex flex-wrap gap-3">
+          <button type="button" className="sp-btn" onClick={share}>
+            <Icon name="Share2" className="h-4 w-4" /> Share
+          </button>
+          <button type="button" className="sp-btn-blue" onClick={copy}>
+            Copy link
+          </button>
         </div>
-      </section>
-
-      {sprint && (
-        <Card className="mt-4 p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <span className="text-sm font-semibold text-ink-soft">Hearts left today</span>
-            <Hearts n={progress.hearts} />
-          </div>
-          <LevelBar xp={progress.xp} />
-        </Card>
-      )}
-
-      <section className="mt-6" aria-labelledby="work-h">
-        <h2 id="work-h" className="display text-xl">{weak.length ? 'Skills to work on' : 'No weak spots this time'}</h2>
-        {weak.length === 0 ? (
-          <p className="mt-1 text-sm text-ink-soft">Everything you answered was right. Keep going — streaks unlock harder questions worth more points.</p>
-        ) : (
-          <ul className="mt-3 space-y-3">
-            {weak.map((w) => {
-              const s = AREAS[w.area];
-              return (
-                <li key={w.area}>
-                  <Card className="p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="flex items-center gap-2 font-semibold">
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-magenta-50 text-magenta-700">
-                          <Icon name={s.icon} className="h-4 w-4" />
-                        </span>
-                        {s.title}
-                      </h3>
-                      <span className="flex shrink-0 flex-col items-end gap-1">
-                        <span className="rounded-full bg-mist-100 px-2 py-0.5 text-xs font-semibold text-ink-soft">
-                          {w.right} of {w.seen} right
-                        </span>
-                        {rel && rel[w.area] === 2 && <span className="rounded-full bg-magenta-50 px-2 py-0.5 text-[11px] font-bold text-magenta-700">Core for you</span>}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm leading-relaxed text-ink-soft">{s.fact}</p>
-                    <p className="mt-2 rounded-2xl bg-mist-50 p-3 text-sm">
-                      <strong>Try this week:</strong> {s.tip}
-                    </p>
-                    <p className="mt-3 text-xs font-bold uppercase tracking-[0.12em] text-ink-mute">Read & use</p>
-                    <ul className="mt-1 space-y-1">
-                      {s.readings.map((r) => (
-                        <li key={r.url + r.label}>
-                          <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-navy-700 underline-offset-4 hover:underline">
-                            {r.label}
-                            <span className="font-normal text-ink-mute"> · {r.org}</span>
-                            <Icon name="ExternalLink" className="h-3.5 w-3.5" />
-                            <span className="sr-only">(opens in a new tab)</span>
-                          </a>
-                        </li>
-                      ))}
-                      <li className="pt-1">
-                        <button type="button" onClick={() => onAgain('practice', groupOf(w.area).id)} className="inline-flex items-center gap-1 text-sm font-semibold text-magenta-700 underline-offset-4 hover:underline">
-                          Practise {groupOf(w.area).title.toLowerCase()} <Icon name="ArrowRight" className="h-3.5 w-3.5" />
-                        </button>
-                      </li>
-                    </ul>
-                  </Card>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      {strong.length > 0 && (
-        <section className="mt-6" aria-labelledby="strong-h">
-          <h2 id="strong-h" className="display text-xl">You’re strong at</h2>
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {strong.map((s) => (
-              <li key={s.area} className="inline-flex items-center gap-1.5 rounded-full bg-sage-100 px-3 py-1.5 text-sm font-semibold text-sage-700">
-                <Icon name={AREAS[s.area].icon} className="h-4 w-4" />
-                {AREAS[s.area].title}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {progress.player && sprint && <Leaderboard player={progress.player} best={progress.best} />}
-      {progress.player && <SkillMapSection player={progress.player} stats={progress.stats} />}
-
-      {round.answers.length > 0 && (
-        <section className="mt-6" aria-labelledby="review-h">
-          <h2 id="review-h" className="display text-xl">Review your answers</h2>
-          <ol className="mt-3 space-y-2">
-            {[...round.answers].sort((a, b) => Number(a.right) - Number(b.right)).map((a) => (
-              <li key={a.question.id} className="rounded-2xl bg-white p-3.5 shadow-card">
-                <p className="flex items-start gap-2 text-sm font-semibold">
-                  <Icon name={a.right ? 'CircleCheck' : 'X'} className={cx('mt-0.5 h-4 w-4 shrink-0', a.right ? 'text-sage-700' : 'text-magenta-600')} label={a.right ? 'Right' : 'Wrong'} />
-                  {a.question.question}
-                </p>
-                {!a.right && (
-                  <p className="mt-1.5 pl-6 text-sm text-ink-soft">
-                    Answer: <strong className="text-ink">{a.question.options[a.question.answer]}</strong>. {a.question.explain}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      <div className="mt-8 grid gap-2">
-        {progress.hearts > 0 ? (
-          <Button variant="accent" icon="Zap" onClick={() => onAgain('sprint', topicGroup)}>
-            {topicGroup ? `Another ${groupById(topicGroup).title.toLowerCase()} sprint` : 'Another sprint'}
-          </Button>
-        ) : (
-          <Button variant="secondary" icon="BookOpen" onClick={() => onAgain('practice', topicGroup)}>
-            Keep practising — no timer, no hearts
-          </Button>
-        )}
-        {sprint && right > 0 && (
-          <section className="rounded-3xl border-2 border-dashed border-magenta-300 bg-white p-4" aria-labelledby="dare-h">
-            <h2 id="dare-h" className="flex items-center gap-2 font-semibold">
-              <Icon name="Trophy" className="h-5 w-5 text-magenta-600" />
-              Challenge a friend to beat {right}
-            </h2>
-            <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-              <Button variant="accent" icon="Share2" onClick={share}>
-                Share
-              </Button>
-              <Button variant="secondary" onClick={copy}>
-                Copy link
-              </Button>
-            </div>
-            <label className="mt-3 block text-xs font-semibold text-ink-mute">
-              Or copy this link
-              <input readOnly value={link} onFocus={(e) => e.currentTarget.select()} className="mt-1 w-full rounded-xl border border-mist-300 bg-mist-50 px-3 py-2 text-sm font-normal text-ink" />
-            </label>
-            <p className="mt-2 min-h-[1.25rem] text-sm font-semibold text-sage-700" aria-live="polite">{shared}</p>
-          </section>
-        )}
-        <Button variant="ghost" onClick={onHome}>
-          Back to start
-        </Button>
+        <label className="mt-4 block text-xs font-semibold text-sp-mute">
+          Or copy this link
+          <input readOnly value={link} onFocus={(e) => e.currentTarget.select()} className="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm font-normal text-white" />
+        </label>
+        <p className="mt-2 min-h-[1.25rem] text-sm font-semibold text-sp-mint" aria-live="polite">{shared}</p>
       </div>
-    </>
+    </details>
   );
 }
-
-const secondsLabel = (s: number) => {
-  const n = Math.max(1, Math.round(s));
-  return `${n} second${n === 1 ? '' : 's'}`;
-};
 
 /** Copies text, falling back to a hidden textarea where the Clipboard API isn't allowed. */
 async function copyText(text: string): Promise<boolean> {

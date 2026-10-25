@@ -4,12 +4,13 @@
 // the quiz and the simulators never disagree. Anything illustrative says so.
 
 import type { Area, Stage } from './areas';
-import { monthlyCpf } from '../engine/cpf';
+import { monthlyCpf, owCeiling } from '../engine/cpf';
 import { residentTax } from '../engine/tax';
-import { BASE_YEAR, EARNED_INCOME_RELIEF_BELOW_55 } from '../engine/assumptions';
+import { BASE_YEAR, CPF_ANNUAL_SALARY_CEILING, EARNED_INCOME_RELIEF_BELOW_55 } from '../engine/assumptions';
 import { cardExtra } from '../data/lifeScenarios';
 
-export type Tier = 1 | 2 | 3;
+/** 1 Easy · 2 Medium · 3 Hard · 4 Expert (multi-step; unlocked at higher levels). */
+export type Tier = 1 | 2 | 3 | 4;
 
 export interface Question {
   id: string;
@@ -42,6 +43,15 @@ const early = fv(200, 0.04, 40);
 const late = fv(200, 0.04, 30);
 const scam = 500 * Math.pow(1.05, 52);
 const inflated = 1000 * Math.pow(1.02, 20);
+// Expert-tier workings
+const bonusCpf = Math.max(0, CPF_ANNUAL_SALARY_CEILING - owCeiling(BASE_YEAR) * 12);
+const habit = fv(65, 0.04, 10);
+const gap35 = 150000 * Math.pow(1.02, 35);
+const feeLow = 10000 * Math.pow(1.057, 20);
+const feeHigh = 10000 * Math.pow(1.045, 20);
+const cardRate = 0.27 / 12;
+const cardMonths = -Math.log(1 - (cardRate * 3000) / 150) / Math.log(1 + cardRate);
+const save50k = (50000 * (0.03 / 12)) / (Math.pow(1 + 0.03 / 12, 60) - 1);
 
 export const QUESTIONS: Question[] = [
   // ---------- Reading your payslip ----------
@@ -567,5 +577,84 @@ export const QUESTIONS: Question[] = [
     options: ['A colleague over 21', 'Someone who inherits under the will', 'A neighbour over 21'], answer: 1,
     explain: 'You need two witnesses over 21, and they must not be beneficiaries (or their spouses).',
     sourceIds: ['moneysenseWill'],
+  },
+  // ---------- Expert (tier 4): multi-step, unlocked at Strategist ----------
+  {
+    id: 'x-bonus-cpf', area: 'payslip', tier: 4,
+    question: 'You’re 25, earn $9,000 a month all year, and get a $9,000 bonus in December. With the $102,000 annual salary ceiling, how much of the bonus attracts CPF?',
+    options: ['$9,000', $(bonusCpf), '$0'], answer: 1,
+    explain: `Monthly CPF stops at $8,000, so $8,000 × 12 = $96,000 of salary counts. The annual ceiling leaves $102,000 − $96,000 = ${$(bonusCpf)} of the bonus for CPF.`,
+    sourceIds: ['cpfConRate'],
+  },
+  {
+    id: 'x-habit', area: 'budgeting', tier: 4,
+    question: 'You drop a $15-a-week habit and invest the money every month at an illustrative 4% a year. Roughly what is it worth after 10 years?',
+    options: ['~$7,800', `~${$(Math.round(habit / 100) * 100)}`, '~$15,600'], answer: 1,
+    explain: `$15 × 52 ÷ 12 ≈ $65 a month. You put in about $7,800; growth takes it to ≈ ${$(habit)}. Illustrative, not guaranteed.`,
+  },
+  {
+    id: 'x-runway-mix', area: 'emergency', tier: 4,
+    question: 'You lose your job. Costs are $2,400 a month, savings $6,000, and freelancing brings in 40% of your old $3,000 pay. How long do your savings last?',
+    options: ['2.5 months', '5 months', '7.5 months'], answer: 1,
+    explain: 'Freelancing covers $1,200 (40% of $3,000), so savings cover the other $1,200 a month: $6,000 ÷ $1,200 = 5 months.',
+  },
+  {
+    id: 'x-gap-inflation', area: 'retirement', tier: 4,
+    question: 'You’re 25 and plan to stop work at 60. Bridging to CPF LIFE at 65 needs $150,000 in today’s dollars. At 2% inflation, roughly how much is that in 35 years’ money?',
+    options: ['~$150,000', '~$255,000', `~${$(Math.round(gap35 / 1000) * 1000)}`], answer: 2,
+    explain: `$150,000 × 1.02³⁵ ≈ ${$(gap35)} — about double. Adding 2% × 35 = 70% ($255,000) misses the compounding.`,
+    sourceIds: ['cpfPayoutAge', 'inflationHistory'],
+  },
+  {
+    id: 'x-fees', area: 'investing', tier: 4,
+    question: 'Two funds both earn 6% a year before fees. Fund A charges 1.5% a year, Fund B 0.3%. On $10,000 over 20 years, roughly how much more does B leave you?',
+    options: ['~$2,400', `~${$(Math.round((feeLow - feeHigh) / 100) * 100)}`, '~$12,000'], answer: 1,
+    explain: `A grows at 4.5%: ≈ ${$(feeHigh)}. B grows at 5.7%: ≈ ${$(feeLow)}. Fees compound too — the gap is ≈ ${$(feeLow - feeHigh)}. Illustrative.`,
+  },
+  {
+    id: 'x-downpayment', area: 'housing', tier: 4, stages: ['starting', 'settling'],
+    question: 'A $350,000 flat needs a 15% downpayment. You have $60,000 in your CPF OA and follow MoneySense’s tip to keep $20,000 there. How much cash do you need?',
+    options: ['$0', '$12,500', '$32,500'], answer: 1,
+    explain: '15% × $350,000 = $52,500. You use $40,000 from your OA (keeping $20,000), so $12,500 must come from cash. Downpayment rules vary by loan type — check HDB.',
+    sourceIds: ['moneysenseGoals'],
+  },
+  {
+    id: 'x-cover-gap', area: 'protection', tier: 4, stages: ['starting', 'settling'],
+    question: 'You earn $40,000 a year. You have CPF’s Dependants’ Protection Scheme ($70,000) and $100,000 of employer life cover. How far short are you of MoneySense’s 9× guide for death & TPD?',
+    options: ['$190,000', '$290,000', '$360,000'], answer: 0,
+    explain: '9 × $40,000 = $360,000. You have $70,000 + $100,000 = $170,000, so you’re $190,000 short — a check for people with dependants, not a target for everyone.',
+    sourceIds: ['moneysenseBasics', 'cpfDps'],
+  },
+  {
+    id: 'x-card-payoff', area: 'credit', tier: 4,
+    question: 'You owe $3,000 on a card at about 27% a year and pay $150 a month. Roughly how long until it’s cleared?',
+    options: ['~20 months', `~${Math.round(cardMonths)} months`, '~40 months'], answer: 1,
+    explain: `Interest takes about $68 of the first $150. It takes ≈ ${Math.round(cardMonths)} months and about ${$(150 * cardMonths - 3000)} in interest. ($3,000 ÷ $150 = 20 months ignores the interest.)`,
+    sourceIds: ['creditCards'],
+  },
+  {
+    id: 'x-withdraw-fee', area: 'scams', tier: 4,
+    question: 'An app shows your “profits” growing daily, but says you must pay a 10% “tax” before you can withdraw. What’s going on?',
+    options: ['Normal — investment gains are taxed in Singapore', 'A scam — real platforms don’t make you pay to get your money out', 'Fine if the fee is small'], answer: 1,
+    explain: 'Paying to “release” your own money is a classic scam pattern, and the “profits” are usually fake. Singapore generally doesn’t tax capital gains for individuals either. Stop and check with ScamShield.',
+  },
+  {
+    id: 'x-smooth', area: 'irregular', tier: 4,
+    question: 'You pay yourself a steady $1,800 a month from a buffer that starts at $3,000. Gig income over the next three months: $800, $4,000, $500. What’s left in the buffer?',
+    options: ['$2,900', '$3,000', '$4,700'], answer: 0,
+    explain: '$3,000 + $800 + $4,000 + $500 = $8,300 in, minus 3 × $1,800 = $5,400 paid out. $2,900 left — the buffer carried you through the $800 and $500 months.',
+  },
+  {
+    id: 'x-goal-pmt', area: 'saving', tier: 4,
+    question: 'You want $50,000 in 5 years and earn an illustrative 3% a year. Roughly how much do you need to save each month?',
+    options: ['~$650', `~${$(Math.round(save50k / 10) * 10)}`, '~$833'], answer: 1,
+    explain: `Without interest it’s $50,000 ÷ 60 = $833. Growth does part of the work, bringing it to ≈ ${$(save50k)} a month. Illustrative.`,
+  },
+  {
+    id: 'x-marriage', area: 'legacy', tier: 4,
+    question: 'You made a will and a CPF nomination while single, then got married. Which still stands?',
+    options: ['Both', 'Neither — marriage revokes both', 'Only the CPF nomination'], answer: 1,
+    explain: 'Marriage revokes an existing will and an existing CPF nomination, so make new ones after the wedding. (Divorce doesn’t revoke a CPF nomination.)',
+    sourceIds: ['moneysenseWill', 'cpfLegacy'],
   },
 ];

@@ -11,9 +11,12 @@ export default {
         mist: { 50: '#F6F7FC', 100: '#EDF0F8', 200: '#E2E6F0', 300: '#CDD3E3' },
         sage: { 100: '#E1F3EA', 600: '#1F7A52', 700: '#17603F' },
         amber: { 100: '#FCEFD6', 700: '#8A5A00' },
+        // Sprint's dark "game mode" (same blue/pink brand, night palette). Contrast-checked: text-soft 10.5:1, mute 6.6:1 on card.
+        sp: { bg: '#120D3A', card: '#1E1766', raised: '#2A2180', soft: '#D4D2F5', mute: '#A8A5DB', blue: '#6E95FF', 'blue-fill': '#2F5BEA', pink: '#FF5AAE', 'pink-fill': '#D41472', mint: '#3DDC97', amber: '#FFC857' },
       },
       fontFamily: {
         display: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        grotesk: ['"Space Grotesk"', '"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
         sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
       },
       borderRadius: { '2xl': '1.25rem', '3xl': '1.75rem' },

@@ -3,7 +3,7 @@ import { QUESTIONS } from './questions';
 import { SOURCES } from '../data/sources';
 import { AREAS, AREA_ORDER, GROUPS, groupRelevance, relevance, stageOf, type Area, type Player } from './areas';
 import { ageBand, leaderboard, peerAverage } from './peers';
-import { MAX_HEARTS, addStats, diagnose, forToday, groupScores, levelOf, newProgress, nextTier, pickQuestion, pointsFor, questionsFor, startTier, type Focus } from './game';
+import { MAX_HEARTS, RETRY_GAP, addStats, catchUp, diagnose, forToday, groupScores, levelOf, maxTier, newProgress, nextQuestion, nextTier, pickQuestion, pointsFor, questionsFor, startTier, trackPosition, updateMistakes, type Answer, type Focus } from './game';
 
 const mixed = (p: Player): Focus => ({ kind: 'mixed', stage: stageOf(p), weights: relevance(p) });
 const student: Player = { age: 20, situation: 'studying' };
@@ -174,7 +174,8 @@ describe('rules', () => {
     expect(startTier(4)).toBe(3);
     expect(nextTier(1, true, 2)).toBe(2);
     expect(nextTier(1, true, 1)).toBe(1);
-    expect(nextTier(3, true, 4)).toBe(3);
+    expect(nextTier(3, true, 4)).toBe(4);
+    expect(nextTier(3, true, 4, 3)).toBe(3);
     expect(nextTier(2, false, 0)).toBe(1);
   });
 
@@ -205,5 +206,60 @@ describe('rules', () => {
     const d = diagnose(stats);
     expect(d.weak.map((r) => r.area)).toEqual(['credit', 'legacy']);
     expect(d.strong.map((r) => r.area)).toEqual(['scams']);
+  });
+});
+
+describe('Duolingo-style progression', () => {
+  it('the level bar sits between your level and the next on the full track (the 230/250 bug)', () => {
+    expect(trackPosition(0)).toBe(0);
+    expect(trackPosition(230)).toBeCloseTo((1 + 130 / 150) / 4); // Saver, most of the way to Planner
+    expect(trackPosition(230)).toBeLessThan(0.5); // before Planner's marker, nowhere near Strategist
+    expect(trackPosition(5000)).toBe(1);
+  });
+
+  it('harder tiers unlock as you level up, and locked questions are never asked', () => {
+    expect(maxTier(levelOf(0).index)).toBe(2);
+    expect(maxTier(levelOf(100).index)).toBe(3);
+    expect(maxTier(levelOf(500).index)).toBe(4);
+    const rookie: Focus = { kind: 'mixed', stage: 'starting', weights: relevance(worker24), maxTier: 2 };
+    expect(questionsFor(QUESTIONS, rookie).every((q) => q.tier <= 2)).toBe(true);
+    expect(QUESTIONS.filter((q) => q.tier === 4).length).toBeGreaterThanOrEqual(12);
+    expect(pointsFor(4, 0)).toBe(40);
+  });
+
+  it('every key area has an Expert question', () => {
+    for (const g of GROUPS) expect(QUESTIONS.some((q) => q.tier === 4 && g.areas.includes(q.area)), g.id).toBe(true);
+  });
+
+  const ans = (id: string, right: boolean): Answer => ({ question: QUESTIONS.find((q) => q.id === id)!, chosen: 0, right });
+
+  it('mistakes are remembered until put right', () => {
+    let m = updateMistakes([], [ans('pay-own-cpf', false), ans('ret-age', true), ans('leg-age', false)]);
+    expect(m).toEqual(['pay-own-cpf', 'leg-age']);
+    m = updateMistakes(m, [ans('pay-own-cpf', true)]);
+    expect(m).toEqual(['leg-age']);
+  });
+
+  it('a question missed in this round comes back after a few others', () => {
+    const focus: Focus = { kind: 'mixed', stage: 'starting', weights: relevance(worker24), maxTier: 4 };
+    const answers = [ans('pay-own-cpf', false)];
+    const retries = [{ id: 'pay-own-cpf', due: 1 + RETRY_GAP }];
+    const base = { tier: 1 as const, asked: new Set(['pay-own-cpf']), roundAreas: {}, focus, retries, past: [] };
+    expect(nextQuestion(QUESTIONS, { ...base, answers }).question?.id).not.toBe('pay-own-cpf');
+    const later = [...answers, ans('ret-age', true), ans('emg-size', true), ans('bud-leftover', true)];
+    expect(nextQuestion(QUESTIONS, { ...base, answers: later })).toMatchObject({ question: { id: 'pay-own-cpf' }, retry: true });
+  });
+
+  it('past mistakes are mixed into the next round', () => {
+    const focus: Focus = { kind: 'mixed', stage: 'starting', weights: relevance(worker24), maxTier: 4 };
+    const n = nextQuestion(QUESTIONS, { tier: 1, asked: new Set(['ret-age']), roundAreas: {}, focus, answers: [ans('ret-age', true)], retries: [], past: ['leg-age'] });
+    expect(n).toMatchObject({ question: { id: 'leg-age' }, retry: true });
+  });
+
+  it('catch-up picks areas below peers, core ones first', () => {
+    const you = groupScores({ credit: { right: 1, seen: 4 }, budgeting: { right: 1, seen: 2 }, retirement: { right: 2, seen: 2 } });
+    const peers = { everyday: 0.6, safety: 0.6, credit: 0.6, earning: 0.6, growing: 0.6, future: 0.6 };
+    const rel = { everyday: 1, safety: 2, credit: 2, earning: 2, growing: 2, future: 1 } as const;
+    expect(catchUp(you, peers, rel)).toEqual(['credit', 'everyday']);
   });
 });
